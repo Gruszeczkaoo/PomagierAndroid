@@ -1,0 +1,93 @@
+name: Build Pomagier Android APK v1.0.17
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Setup Gradle 8.9
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Find and extract Android project
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf extracted
+          mkdir extracted
+
+          ZIP_FILE="$(find . -maxdepth 1 -type f -name 'PomagierAndroid_v1.0.17_RAID_AUTO*.zip' -printf '%T@ %p\n' | sort -nr | head -n 1 | cut -d' ' -f2-)"
+
+          if [ -z "$ZIP_FILE" ]; then
+            echo "ERROR: Nie znaleziono ZIP-a v1.0.17 w katalogu glownym repo."
+            ls -la
+            exit 1
+          fi
+
+          echo "Uzywam paczki: $ZIP_FILE"
+          unzip -tq "$ZIP_FILE"
+          unzip -q "$ZIP_FILE" -d extracted
+
+          PROJECT_DIR="$(find extracted -maxdepth 1 -type d -name 'PomagierAndroid_v1.0.17_RAID_AUTO*' -print | head -n 1)"
+          if [ -z "$PROJECT_DIR" ]; then
+            echo "ERROR: Nie znaleziono katalogu projektu po rozpakowaniu."
+            find extracted -maxdepth 2 -type d -print
+            exit 1
+          fi
+
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Projekt: $PROJECT_DIR"
+
+      - name: Validate sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          node --check app/src/main/assets/pomagier.user.js
+          python -m py_compile app/src/main/python/brain.py app/src/main/python/brain_android.py
+
+      - name: Build signed release APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$PROJECT_DIR"
+          gradle --no-daemon clean assembleRelease
+
+      - name: Prepare APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$PROJECT_DIR/app/build/outputs/apk/release/app-release.apk" "Pomagier-by-Don-v1.0.17.apk"
+          sha256sum "Pomagier-by-Don-v1.0.17.apk" > "Pomagier-by-Don-v1.0.17.apk.sha256"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pomagier-by-Don-v1.0.17
+          if-no-files-found: error
+          path: |
+            Pomagier-by-Don-v1.0.17.apk
+            Pomagier-by-Don-v1.0.17.apk.sha256
