@@ -26,45 +26,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: One-time cleanup of old workflow files
-        shell: bash
-        continue-on-error: true
-        run: |
-          set -u
-          KEEP=".github/workflows/build-apk.yml"
-          mkdir -p .github/workflows
-
-          mapfile -t OLD < <(
-            find .github/workflows -maxdepth 1 -type f \
-              \( -name '*.yml' -o -name '*.yaml' \) \
-              ! -path "$KEEP" -print
-          )
-
-          if [ "${#OLD[@]}" -eq 0 ]; then
-            echo "Brak starych workflowow do usuniecia."
-            exit 0
-          fi
-
-          echo "Usuwam stare workflowy:"
-          printf ' - %s\n' "${OLD[@]}"
-          rm -f "${OLD[@]}"
-
-          git config user.name "Pomagier Build Bot"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/workflows
-
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-
-          git commit -m "Cleanup old Pomagier workflows"
-
-          if git push; then
-            echo "Stare workflowy usuniete z repo."
-          else
-            echo "::warning::Nie udalo sie wypchnac sprzatania. Build bedzie kontynuowany. W Settings > Actions > General ustaw Workflow permissions na Read and write permissions i uruchom ten workflow ponownie."
-          fi
-
       - name: Setup Java 17
         uses: actions/setup-java@v5
         with:
@@ -81,38 +42,47 @@ jobs:
         with:
           gradle-version: '8.9'
 
-      - name: Find newest Pomagier ZIP and extract
+      - name: Resolve project source
         shell: bash
         run: |
           set -euo pipefail
-          rm -rf extracted
-          mkdir extracted
 
-          ZIP_FILE="$(
-            find . -maxdepth 1 -type f -name 'PomagierAndroid_v*.zip' -printf '%f\n' \
-              | sort -V \
-              | tail -n 1
-          )"
+          # Obsługuje oba sposoby pracy:
+          # 1) pełny projekt Android w repo,
+          # 2) paczka PomagierAndroid_v*.zip w katalogu głównym.
+          if [ -f "settings.gradle.kts" ] && [ -f "app/build.gradle.kts" ]; then
+            PROJECT_DIR="$GITHUB_WORKSPACE"
+            echo "Buduję projekt bezpośrednio z repo."
+          else
+            rm -rf extracted
+            mkdir extracted
 
-          if [ -z "$ZIP_FILE" ]; then
-            echo "ERROR: Nie znaleziono PomagierAndroid_v*.zip w katalogu glownym repo."
-            ls -la
-            exit 1
-          fi
+            ZIP_FILE="$(
+              find . -maxdepth 1 -type f -name 'PomagierAndroid_v*.zip' -printf '%f\n' \
+                | sort -V \
+                | tail -n 1
+            )"
 
-          echo "Uzywam najnowszej paczki: $ZIP_FILE"
-          unzip -tq "$ZIP_FILE"
-          unzip -q "$ZIP_FILE" -d extracted
+            if [ -z "$ZIP_FILE" ]; then
+              echo "ERROR: Nie znaleziono projektu Android ani PomagierAndroid_v*.zip."
+              ls -la
+              exit 1
+            fi
 
-          PROJECT_DIR="$(
-            find extracted -mindepth 1 -maxdepth 2 -type f -name 'settings.gradle.kts' -printf '%h\n' \
-              | head -n 1
-          )"
+            echo "Używam najnowszej paczki: $ZIP_FILE"
+            unzip -tq "$ZIP_FILE"
+            unzip -q "$ZIP_FILE" -d extracted
 
-          if [ -z "$PROJECT_DIR" ]; then
-            echo "ERROR: Nie znaleziono projektu Android po rozpakowaniu."
-            find extracted -maxdepth 3 -type f -print | head -n 100
-            exit 1
+            PROJECT_DIR="$(
+              find extracted -mindepth 1 -maxdepth 3 -type f -name 'settings.gradle.kts' -printf '%h\n' \
+                | head -n 1
+            )"
+
+            if [ -z "$PROJECT_DIR" ]; then
+              echo "ERROR: Nie znaleziono projektu Android po rozpakowaniu."
+              find extracted -maxdepth 4 -type f -print | head -n 100
+              exit 1
+            fi
           fi
 
           VERSION="$(
@@ -165,3 +135,42 @@ jobs:
           path: |
             ${{ env.APK_FILE }}
             ${{ env.APK_FILE }}.sha256
+
+      - name: One-time cleanup of old workflow files
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -u
+          KEEP=".github/workflows/build-apk.yml"
+          mkdir -p .github/workflows
+
+          mapfile -t OLD < <(
+            find .github/workflows -maxdepth 1 -type f \
+              \( -name '*.yml' -o -name '*.yaml' \) \
+              ! -path "$KEEP" -print
+          )
+
+          if [ "${#OLD[@]}" -eq 0 ]; then
+            echo "Brak starych workflowów do usunięcia."
+            exit 0
+          fi
+
+          echo "Usuwam stare workflowy:"
+          printf ' - %s\n' "${OLD[@]}"
+          rm -f "${OLD[@]}"
+
+          git config user.name "Pomagier Build Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows
+
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+
+          git commit -m "Cleanup old Pomagier workflows [skip ci]"
+
+          if git push; then
+            echo "Stare workflowy usunięte z repo."
+          else
+            echo "::warning::Nie udało się automatycznie usunąć starych workflowów. Build APK zakończył się normalnie. Usuń stare pliki .github/workflows ręcznie albo nadaj workflowowi prawo zapisu i uruchom go ponownie."
+          fi
