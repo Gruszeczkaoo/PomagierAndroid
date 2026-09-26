@@ -85,10 +85,15 @@ jobs:
             fi
           fi
 
-          # v1.0.22: nakładka na najnowszą bazową paczkę projektu
+          # Kolejne nakładki na najnowszą bazową paczkę projektu.
           if [ -f "$GITHUB_WORKSPACE/tools/patch_v1022.py" ]; then
             echo "Nakładam aktualizację v1.0.22..."
             python "$GITHUB_WORKSPACE/tools/patch_v1022.py" "$PROJECT_DIR"
+          fi
+
+          if [ -f "$GITHUB_WORKSPACE/tools/patch_v1023.py" ]; then
+            echo "Nakładam aktualizację v1.0.23..."
+            python "$GITHUB_WORKSPACE/tools/patch_v1023.py" "$PROJECT_DIR"
           fi
 
           VERSION="$(
