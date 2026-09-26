@@ -133,14 +133,24 @@ jobs:
           sha256sum "$OUT" > "$OUT.sha256"
           echo "APK_FILE=$OUT" >> "$GITHUB_ENV"
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Pomagier-by-Don-v${{ env.POMAGIER_VERSION }}
-          if-no-files-found: error
-          path: |
-            ${{ env.APK_FILE }}
-            ${{ env.APK_FILE }}.sha256
+      - name: Publish APK to repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp "$APK_FILE" "dist/$APK_FILE"
+          cp "$APK_FILE.sha256" "dist/$APK_FILE.sha256"
+
+          git config user.name "Pomagier Build Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "dist/$APK_FILE" "dist/$APK_FILE.sha256"
+
+          if git diff --cached --quiet; then
+            echo "APK already published."
+          else
+            git commit -m "Publish Pomagier v${POMAGIER_VERSION} APK [skip ci]"
+            git push
+          fi
 
       - name: One-time cleanup of old workflow files
         shell: bash
