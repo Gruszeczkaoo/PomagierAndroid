@@ -66,8 +66,7 @@ if handler not in s:
     s = s.replace(handler_anchor, handler + handler_anchor, 1)
 
 # Hard runtime gate: OFF blocks only NEW district work. Existing result/arrival may still be closed safely.
-type_anchor = "    const type=String(action.type||'none');
-"
+type_anchor = "    const type=String(action.type||'none');\n"
 gate = """    const type=String(action.type||'none');
     if(!autoCfg.localAiMenelMode && ['menel_start','menel_complete_now','travel'].includes(type)){
       return gate('MENELMODE/DZIELNICE OFF',3000);
