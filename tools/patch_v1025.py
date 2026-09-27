@@ -98,39 +98,30 @@ s = s.replace(
 )
 
 # Garden internal status: unlocked flag from the endpoint is not authoritative when real slots/actions exist.
-old_gstatus = """    const growing=g.slots.filter(x=>x.status==='growing').length;
-    const ready=g.slots.filter(x=>x.status==='ready').length;
-    g.status=g.unlocked
-      ? `${growing}/4 rośnie${ready?` • ${ready} gotowe`:''} • nasiona ${g.availableSeeds}`
-      : 'OGRÓD NIEDOSTĘPNY';"""
-new_gstatus = """    const growing=g.slots.filter(x=>x.status==='growing').length;
-    const ready=g.slots.filter(x=>x.status==='ready').length;
-    const gardenHasRealData=g.slots.length>0 || /zasiano|zebrano/i.test(String(g.lastAction||''));
-    g.status=(g.unlocked!==false || gardenHasRealData)
-      ? `${growing}/${Math.max(6,g.slots.length||6)} rośnie${ready?` • ${ready} gotowe`:''} • nasiona ${g.availableSeeds}`
-      : 'OGRÓD NIEDOSTĘPNY';"""
-if old_gstatus not in s:
-    raise SystemExit("Nie znaleziono statusu ogrodu")
-s = s.replace(old_gstatus, new_gstatus, 1)
+s = s.replace(
+    "    g.status=g.unlocked\n",
+    "    const gardenHasRealData=g.slots.length>0 || /zasiano|zebrano/i.test(String(g.lastAction||''));\n    g.status=(g.unlocked!==false || gardenHasRealData)\n",
+    1
+)
+s = s.replace("${growing}/4 rośnie", "${growing}/${Math.max(6,g.slots.length||6)} rośnie", 1)
+s = s.replace("${growing}/6 rośnie", "${growing}/${Math.max(6,g.slots.length||6)} rośnie", 1)
 
 # SIMPLE UI garden card: do not show NIEDOSTEPNY when we already sowed/read slots.
-old_gtext = """    const gardenSlots = Array.isArray(garden.slots) ? garden.slots : [];
-    const gardenGrowing = gardenSlots.filter(s=>String(s.status)==='growing').length;
-    const gardenReady = gardenSlots.filter(s=>String(s.status)==='ready').length;
-    const gardenText = garden.unlocked===false ? 'NIEDOSTĘPNY'
-      : gardenSlots.length ? `${gardenGrowing} rośnie${gardenReady?` • ${gardenReady} gotowe`:''} • nasiona ${Number(garden.availableSeeds||0)}`
-      : esc(garden.status||'—');"""
-new_gtext = """    const gardenSlots = Array.isArray(garden.slots) ? garden.slots : [];
-    const gardenGrowing = gardenSlots.filter(s=>String(s.status)==='growing').length;
-    const gardenReady = gardenSlots.filter(s=>String(s.status)==='ready').length;
-    const gardenHasRealData = gardenSlots.length>0 || /zasiano|zebrano/i.test(String(garden.lastAction||''));
-    const gardenText = (garden.unlocked===false && !gardenHasRealData) ? 'NIEDOSTĘPNY'
-      : gardenSlots.length ? `${gardenGrowing}/${Math.max(6,gardenSlots.length||6)} rośnie${gardenReady?` • ${gardenReady} gotowe`:''} • nasiona ${Number(garden.availableSeeds||0)}`
-      : gardenHasRealData ? 'AKTYWNY'
-      : esc(garden.status||'—');"""
-if old_gtext not in s:
-    raise SystemExit("Nie znaleziono gardenText w SIMPLE UI")
-s = s.replace(old_gtext, new_gtext, 1)
+s = s.replace(
+    "    const gardenText = garden.unlocked===false ? 'NIEDOSTĘPNY'\n",
+    "    const gardenHasRealData = gardenSlots.length>0 || /zasiano|zebrano/i.test(String(garden.lastAction||''));\n    const gardenText = (garden.unlocked===false && !gardenHasRealData) ? 'NIEDOSTĘPNY'\n",
+    1
+)
+s = s.replace(
+    "${gardenGrowing} rośnie${gardenReady?",
+    "${gardenGrowing}/${Math.max(6,gardenSlots.length||6)} rośnie${gardenReady?",
+    1
+)
+s = s.replace(
+    "      : esc(garden.status||'—');",
+    "      : gardenHasRealData ? 'AKTYWNY'\n      : esc(garden.status||'—');",
+    1
+)
 
 # Text cleanups after moving to six plots/potato priority.
 s = s.replace("OGRÓD AI: obserwuj 4 grządki i ucz się realnego tempa wzrostu", "OGRÓD AI: obserwuj 6 grządek i ucz się realnego tempa wzrostu")
