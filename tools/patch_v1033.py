@@ -50,8 +50,8 @@ new="""  function pvpLabOpponentEffective(meta){
 if old not in s: raise SystemExit("Nie znaleziono pvpLabCandidateScore start")
 s=s.replace(old,new,1)
 
-old2="realPvpObjective:true,totalAttributePoints,sourceWeights:"
-new2="realPvpObjective:true,totalAttributePoints,opponentRaw:{...(meta.opponent||{})},opponentEffective:pvpLabOpponentEffective(meta),sourceWeights:"
+old2="method:\'REAL_PVP_EQUAL_1TO1_COUNTERFACTUAL_V4_DYNAMIC_POINTS\',totalAttributePoints,realPvpObjective:true,sourceWeights:"
+new2="method:\'REAL_PVP_EQUAL_1TO1_COUNTERFACTUAL_V4_DYNAMIC_POINTS\',totalAttributePoints,realPvpObjective:true,opponentRaw:{...(meta.opponent||{})},opponentEffective:pvpLabOpponentEffective(meta),sourceWeights:"
 if old2 not in s: raise SystemExit("Nie znaleziono miejsca opponent diagnostics")
 s=s.replace(old2,new2,1)
 
