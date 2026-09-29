@@ -1,1 +1,1 @@
-Build trigger for Pomagier v1.0.40 NPC selector.
+Build trigger for Pomagier v1.0.40 NPC selector. Retry after publish race.
