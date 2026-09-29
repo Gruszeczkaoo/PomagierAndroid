@@ -181,6 +181,11 @@ jobs:
             python "$GITHUB_WORKSPACE/tools/patch_v1040.py" "$PROJECT_DIR"
           fi
 
+          if [ -f "$GITHUB_WORKSPACE/tools/patch_v1041.py" ]; then
+            echo "Nakładam aktualizację v1.0.41..."
+            python "$GITHUB_WORKSPACE/tools/patch_v1041.py" "$PROJECT_DIR"
+          fi
+
           VERSION="$(
             sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
               "$PROJECT_DIR/app/build.gradle.kts" | head -n 1
