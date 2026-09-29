@@ -19,3 +19,17 @@ try:
     print("=== NPC_DIAG_V1040_END ===")
 except Exception as _e:
     print("NPC_DIAG_ERROR",repr(_e))
+
+
+# Focused NPC diagnostics: migration, execution gate, side actions and selector persistence.
+try:
+    _p = root / "app/src/main/assets/pomagier.user.js"
+    _ls = _p.read_text(encoding="utf-8").splitlines()
+    print("=== NPC_DIAG_V1040_FOCUSED_BEGIN ===")
+    for _a,_b in ((875,905),(4768,4822),(6028,6062),(16298,16362),(18930,18958),(19455,19480)):
+        print(f"--- L{_a}-L{_b} ---")
+        for _n in range(_a, min(_b,len(_ls))+1):
+            print(f"{_n}: {_ls[_n-1][:800]}")
+    print("=== NPC_DIAG_V1040_FOCUSED_END ===")
+except Exception as _e:
+    print("NPC_DIAG_FOCUSED_ERROR",repr(_e))
