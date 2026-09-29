@@ -180,40 +180,28 @@ handler="""    if(act==='purchase-history-clear'){
 """
 s=s.replace(act_anchor,handler+act_anchor,1)
 
-old_render_start="""  function render() {
-    const body = panel.querySelector('.content');
-    const tabs = panel.querySelectorAll('.tab');"""
-new_render_start="""  function render() {
-    const body = panel.querySelector('.content');
-    const __sameRenderTab=body && body.dataset && body.dataset.renderTab===String(state.activeTab);
-    const __keepScroll=__sameRenderTab?Number(body.scrollTop||0):0;
-    const __oldSimpleAdvanced=__sameRenderTab?body.querySelector('details.simple-advanced'):null;
-    const __keepSimpleAdvanced=!!(__oldSimpleAdvanced && __oldSimpleAdvanced.open);
-    const tabs = panel.querySelectorAll('.tab');"""
-if old_render_start not in s:
-    raise SystemExit("Nie znaleziono początku render()")
-s=s.replace(old_render_start,new_render_start,1)
+# Zachowaj otwarcie sekcji Zaawansowane przez kolejne automatyczne render() bez dotykania routera.
+details_tag='      <details class="section simple-advanced">'
+details_open='      <details class="section simple-advanced" ${localStorage.getItem(\'pomagier_simple_advanced_open_v1\')===\'1\'?\'open\':\'\'}>'
+if details_tag not in s:
+    raise SystemExit("Nie znaleziono details.simple-advanced")
+s=s.replace(details_tag,details_open,1)
 
-render_start=s.find("  function render() {")
-render_next=s.find("  function updateHeader()",render_start)
-if render_start<0 or render_next<0:
-    raise SystemExit("Nie znaleziono granic render()")
-render_seg=s[render_start:render_next]
-update_pos=render_seg.rfind("    updateHeader();")
-if update_pos<0:
-    raise SystemExit("Nie znaleziono updateHeader() w render()")
-restore="""    body.dataset.renderTab=String(state.activeTab);
-    const __simpleAdvanced=body.querySelector('details.simple-advanced');
-    if(__simpleAdvanced && __keepSimpleAdvanced) __simpleAdvanced.open=true;
-    if(__sameRenderTab && __keepScroll>0){
-      requestAnimationFrame(function(){
-        try{ body.scrollTop=Math.min(__keepScroll,Math.max(0,body.scrollHeight-body.clientHeight)); }catch(_){}
-      });
+# <details> emituje toggle; zapisujemy wybór użytkownika trwale. Listener w capture działa niezależnie od renderów innerHTML.
+click_anchor="  panel.addEventListener('click', async e=>{"
+if click_anchor not in s:
+    raise SystemExit("Nie znaleziono głównego listenera panelu")
+toggle_code="""  panel.addEventListener('toggle', e=>{
+    const d=e.target;
+    if(d && d.matches && d.matches('details.simple-advanced')){
+      try{ localStorage.setItem('pomagier_simple_advanced_open_v1',d.open?'1':'0'); }catch(_){}
     }
-"""
-render_seg=render_seg[:update_pos]+restore+render_seg[update_pos:]
-s=s[:render_start]+render_seg+s[render_next:]
+  },true);
 
+"""
+s=s.replace(click_anchor,toggle_code+click_anchor,1)
+
+# Gdy sekcja pozostaje otwarta, wysokość treści nie zapada się przy innerHTML i bieżący scroll nie jest obcinany.
 js.write_text(s,encoding="utf-8")
 
 bg=root/"app/build.gradle.kts"
