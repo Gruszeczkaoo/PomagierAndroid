@@ -194,11 +194,15 @@ if old_render_start not in s:
     raise SystemExit("Nie znaleziono początku render()")
 s=s.replace(old_render_start,new_render_start,1)
 
-old_render_end="""    if (state.activeTab==='settings') body.innerHTML = settingsHTML();
-    updateHeader();
-  }"""
-new_render_end="""    if (state.activeTab==='settings') body.innerHTML = settingsHTML();
-    body.dataset.renderTab=String(state.activeTab);
+render_start=s.find("  function render() {")
+render_next=s.find("  function updateHeader()",render_start)
+if render_start<0 or render_next<0:
+    raise SystemExit("Nie znaleziono granic render()")
+render_seg=s[render_start:render_next]
+update_pos=render_seg.rfind("    updateHeader();")
+if update_pos<0:
+    raise SystemExit("Nie znaleziono updateHeader() w render()")
+restore="""    body.dataset.renderTab=String(state.activeTab);
     const __simpleAdvanced=body.querySelector('details.simple-advanced');
     if(__simpleAdvanced && __keepSimpleAdvanced) __simpleAdvanced.open=true;
     if(__sameRenderTab && __keepScroll>0){
@@ -206,11 +210,9 @@ new_render_end="""    if (state.activeTab==='settings') body.innerHTML = setting
         try{ body.scrollTop=Math.min(__keepScroll,Math.max(0,body.scrollHeight-body.clientHeight)); }catch(_){}
       });
     }
-    updateHeader();
-  }"""
-if old_render_end not in s:
-    raise SystemExit("Nie znaleziono końca render()")
-s=s.replace(old_render_end,new_render_end,1)
+"""
+render_seg=render_seg[:update_pos]+restore+render_seg[update_pos:]
+s=s[:render_start]+render_seg+s[render_next:]
 
 js.write_text(s,encoding="utf-8")
 
