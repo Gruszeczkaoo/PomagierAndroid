@@ -211,6 +211,11 @@ jobs:
             python "$GITHUB_WORKSPACE/tools/patch_v1046.py" "$PROJECT_DIR"
           fi
 
+          if [ -f "$GITHUB_WORKSPACE/tools/patch_v1047.py" ]; then
+            echo "Nakładam aktualizację v1.0.47..."
+            python "$GITHUB_WORKSPACE/tools/patch_v1047.py" "$PROJECT_DIR"
+          fi
+
 
 
           VERSION="$(
