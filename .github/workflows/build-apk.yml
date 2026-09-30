@@ -201,14 +201,14 @@ jobs:
             python "$GITHUB_WORKSPACE/tools/patch_v1044.py" "$PROJECT_DIR"
           fi
 
-          if [ -f "$GITHUB_WORKSPACE/tools/inspect_v1044.py" ]; then
-            echo "Inspekcja finalnej v1.0.44 przed v1.0.45..."
-            python "$GITHUB_WORKSPACE/tools/inspect_v1044.py" "$PROJECT_DIR"
-          fi
-
           if [ -f "$GITHUB_WORKSPACE/tools/patch_v1045.py" ]; then
             echo "Nakładam aktualizację v1.0.45..."
             python "$GITHUB_WORKSPACE/tools/patch_v1045.py" "$PROJECT_DIR"
+          fi
+
+          if [ -f "$GITHUB_WORKSPACE/tools/inspect_v1044.py" ]; then
+            echo "Inspekcja finalnej v1.0.45..."
+            python "$GITHUB_WORKSPACE/tools/inspect_v1044.py" "$PROJECT_DIR"
           fi
 
 
