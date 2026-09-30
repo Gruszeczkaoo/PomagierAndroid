@@ -201,6 +201,11 @@ jobs:
             python "$GITHUB_WORKSPACE/tools/patch_v1044.py" "$PROJECT_DIR"
           fi
 
+          if [ -f "$GITHUB_WORKSPACE/tools/inspect_purchase_v1044.py" ]; then
+            echo "Inspekcja zakupów i mostka Android przed v1.0.45..."
+            python "$GITHUB_WORKSPACE/tools/inspect_purchase_v1044.py" "$PROJECT_DIR"
+          fi
+
 
           VERSION="$(
             sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
