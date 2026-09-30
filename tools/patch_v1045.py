@@ -166,15 +166,17 @@ new="""    const spendGate=profitAwarePurchaseDecision(target,live,planned,cycle
     if(!spendGate.ok) return {ok:false,reason:spendGate.reason};
 
     let batchQty=1;
+    let batchQuote={qty:1,total:live,complete:true};
     if(isWineYeastItem(source.itemId,source.name)){
       const spendLeft=Math.max(0,Number(autoCfg.maxSpendPerDay||0)-Number(autoSpend.amount||0));
       const byBudget=live>0?Math.floor(spendLeft/live):0;
       batchQty=Math.max(1,Math.min(50,byBudget||1));
       const priceCeiling=planned>0?planned*maxDrift:live;
-      const quote=bazaarBatchQuote(listings,batchQty,{maxUnit:priceCeiling});
-      batchQty=Math.max(1,Math.min(batchQty,Number(quote.qty||1)));
+      batchQuote=bazaarBatchQuote(listings,batchQty,{maxUnit:priceCeiling});
+      batchQty=Math.max(1,Math.min(batchQty,Number(batchQuote.qty||1)));
+      batchQuote=bazaarBatchQuote(listings,batchQty,{maxUnit:priceCeiling});
     }
-    const estimatedBatchCost=live*batchQty;
+    const estimatedBatchCost=Math.max(live,Number(batchQuote.total||live*batchQty));
     if(Number(autoSpend.amount||0)+estimatedBatchCost>Number(autoCfg.maxSpendPerDay||0)) return {ok:false,reason:'limit wydatku dziennego'};
 
     if(spendGate.override){"""
