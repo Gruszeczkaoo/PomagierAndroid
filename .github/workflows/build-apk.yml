@@ -196,6 +196,11 @@ jobs:
             python "$GITHUB_WORKSPACE/tools/patch_v1043.py" "$PROJECT_DIR"
           fi
 
+          if [ -f "$GITHUB_WORKSPACE/tools/inspect_v1043.py" ]; then
+            echo "Inspekcja finalnego źródła v1.0.43..."
+            python "$GITHUB_WORKSPACE/tools/inspect_v1043.py" "$PROJECT_DIR"
+          fi
+
           VERSION="$(
             sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
               "$PROJECT_DIR/app/build.gradle.kts" | head -n 1
