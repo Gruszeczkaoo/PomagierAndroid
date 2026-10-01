@@ -120,7 +120,7 @@ cards_marker='      <div class="cards mini">'
 if cards_marker not in seg:
     raise SystemExit("Brak cards mini w pvpLabHTML")
 if 'data-pvp-engine-v2-scanner="1"' not in seg:
-    seg=seg.replace(cards_marker,'      <div data-pvp-engine-v2-scanner="1" class="section pvp-best">\${pvpEngineScanPanelBodyHTML()}</div>\n'+cards_marker,1)
+    seg=seg.replace(cards_marker,'      <div data-pvp-engine-v2-scanner="1" class="section pvp-best">${pvpEngineScanPanelBodyHTML()}</div>\n'+cards_marker,1)
 s=s[:pa]+seg+s[pb:]
 
 old_box=r"""      let box=content.querySelector('[data-pvp-engine-v2-scanner]');
@@ -200,8 +200,8 @@ s=s.replace(old_current,new_current,1)
 
 s=s.replace("🧠 BEST BUILD — V6 MECHANICS + REALNE PvP","🧠 BEST BUILD — MODEL V6 NA DANYCH REAL PvP",1)
 
-old_engine=" • punkty \${Number(opt.current?.usedPoints||0)}/\${Number(opt.totalAttributePoints||0)} • Przełamania BEST:"
-new_engine=" • punkty \${Number(opt.current?.usedPoints||0)}/\${Number(opt.totalAttributePoints||0)} • walk obecnym buildem \${Number(opt.current?.realFightN||0)} • Przełamania BEST:"
+old_engine=" • punkty ${Number(opt.current?.usedPoints||0)}/${Number(opt.totalAttributePoints||0)} • Przełamania BEST:"
+new_engine=" • punkty ${Number(opt.current?.usedPoints||0)}/${Number(opt.totalAttributePoints||0)} • walk obecnym buildem ${Number(opt.current?.realFightN||0)} • Przełamania BEST:"
 if old_engine in s:
     s=s.replace(old_engine,new_engine,1)
 
