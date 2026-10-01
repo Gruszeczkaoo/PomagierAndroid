@@ -223,8 +223,8 @@ missing=[x for x in checks if x not in s]
 if missing:
     raise SystemExit("v1.0.50 NIEKOMPLETNA: "+", ".join(missing))
 
-if "hero.parentNode.insertBefore(box,hero.nextSibling)" in s or "content.prepend(box)" in s:
-    raise SystemExit("SCROLL FIX: skaner nadal dynamicznie zmienia layout")
+if "let box=content.querySelector('[data-pvp-engine-v2-scanner]')" in s:
+    raise SystemExit("SCROLL FIX: skaner nadal tworzy panel dynamicznie")
 
 js.write_text(s,encoding="utf-8")
 
