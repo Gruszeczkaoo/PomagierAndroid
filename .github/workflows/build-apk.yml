@@ -240,6 +240,12 @@ jobs:
             python "$GITHUB_WORKSPACE/tools/patch_v1051.py" "$PROJECT_DIR"
           fi
 
+          if [ -f "$GITHUB_WORKSPACE/tools/patch_v1052.py" ]; then
+            echo "Nakładam aktualizację v1.0.52..."
+            python -m py_compile "$GITHUB_WORKSPACE/tools/patch_v1052.py"
+            python "$GITHUB_WORKSPACE/tools/patch_v1052.py" "$PROJECT_DIR"
+          fi
+
 
 
           VERSION="$(
