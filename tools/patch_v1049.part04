@@ -1,0 +1,92 @@
+turns*.55));
+
+    const directOut=Math.max(1,basicDpt+secondDpt+counterDpt);
+    const outDpt=directOut+bleedDpt;
+
+    const execute=cap(Number(c.execute_threshold_percent||0)/100,0,.18);
+    const targetHp=Math.max(1,Number(o.maxHp||meta.medianOpponentHp||1600))*(1-execute);
+    const healRedToEnemy=cap(Number(c.healing_reduction_percent||0)/100,0,.50);
+    const enemyHeal=Math.max(0,Number(o.regen||0))*(1-healRedToEnemy) +
+      basicDpt*cap(Number(o.lifesteal||0)/100,0,.30)*(1-healRedToEnemy);
+    const netOut=Math.max(1,outDpt-enemyHeal);
+
+    const enemyBase=direct(Number(o.attack||700),stats.defense,Number(o.armorPen||28),Number(c.damage_taken_reduction_percent||0),myEvadeDR)*lowDrF;
+    const enemyCritF=1+enemyCrit*enemyCritBonus;
+    const enemyDouble=cap(Number(o.doubleStrike||0)/100,0,.55);
+    let incomingDirect=enemyBase*enemyHit*enemyCritF*(1+enemyDouble);
+    incomingDirect=Math.max(0,incomingDirect-enemyBase*stunActionsSaved/Math.max(1,turns));
+
+    const enemyBleedP=cap((Number(o.bleedChance||35)-Number(c.bleed_resist_percent||0))/100,0,.95);
+    const enemyContacts=Math.max(.2,enemyHit*(1+enemyDouble)*Math.min(turns,5));
+    const enemyBleedActive=1-Math.pow(1-enemyBleedP,enemyContacts);
+    const enemyBleedDpt=Math.max(0,stats.maxHp)*.02*enemyBleedActive*.62;
+    const incomingDpt=Math.max(1,incomingDirect+enemyBleedDpt);
+
+    const healRedToMe=cap(Number(o.healingReduction||25)/100,0,.50);
+    const regen=Math.min(Number(stats.roundCap||136),Number(stats.regen||0)+lowRegen)*(1-healRedToMe);
+    const lifesteal=directOut*cap(Number(c.lifesteal_percent||0)/100,0,.30)*(1-healRedToMe);
+    const sustainPerRound=regen+lifesteal;
+
+    const killTurns=targetHp/netOut;
+    const survivalTurns=Math.max(1,stats.maxHp)/(Math.max(1,incomingDpt-sustainPerRound));
+    const offense=Math.max(1,netOut)*(1+Math.max(0,15-killTurns)/100);
+    const survival=Math.max(1,stats.maxHp+sustainPerRound*turns)*(1+Math.max(0,survivalTurns-turns)/100);
+    const closeBoost=Math.min(.14,Number(meta.close15||0)/Math.max(1,meta.n||1));
+    const ow=.52-closeBoost/2, sw=.48+closeBoost/2;
+    let score=Math.exp(Math.log(offense)*ow + Math.log(survival)*sw);
+
+    if(includeBreakthrough){
+      const bt=pvpLabBreakthroughPlan(stats,meta);
+      score*=1+Math.min(.08,Number(bt.utility||0)*.025);
+    }
+    return Number.isFinite(score)?score:-Infinity;
+  }""")
+
+replace_func("pvpLabRunOptimizer",r"""  function pvpLabRunOptimizer(){
+    const started=Date.now();
+    try{
+      if(!pvpLabCfg.optimizerEnabled){ pvpLab.optimizer={status:'OFF',at:Date.now()}; pvpLabSave(); return pvpLab.optimizer; }
+
+      const meta=pvpLabRealPvpMeta(), currentAttrs=pvpLabCurrentAttrs(), external=pvpLabExternalVector();
+      const summary=pvpLab.current?.summary||{};
+      const engine=String(summary.combatEngine||'');
+      const balanceVersion=String(summary.balanceVersion||'');
+      const expectedBalance='v6-2026-10-01-pve20-r4';
+      const missingTrees=['str','end','agi','vit','prc'].filter(a=>!Array.isArray(pvpLab.skillTrees?.[a]?.skillTree));
+
+      if(!currentAttrs || !summary.combatStats){
+        pvpLab.optimizer={status:'CZEKA NA SNAPSHOT PVP',at:Date.now(),meta}; pvpLabSave(); return pvpLab.optimizer;
+      }
+      if(missingTrees.length){
+        pvpLab.optimizer={status:`CZEKA NA DRZEWKA: ${missingTrees.join(',').toUpperCase()}`,at:Date.now(),meta}; pvpLabSave(); return pvpLab.optimizer;
+      }
+      if(engine && engine!=='v6'){
+        pvpLab.optimizer={status:`NOWY SILNIK ${engine} — WYMAGANY NOWY SKAN`,at:Date.now(),engine,balanceVersion,meta}; pvpLabSave(); return pvpLab.optimizer;
+      }
+      if(balanceVersion && balanceVersion!==expectedBalance){
+        pvpLab.optimizer={status:`BALANS ZMIENIONY: ${balanceVersion} — ZROB NOWY SKAN`,at:Date.now(),engine,balanceVersion,meta}; pvpLabSave(); return pvpLab.optimizer;
+      }
+
+      const minReal=Math.max(3,Number(pvpLabCfg.optimizerMinRealPvp||8));
+      if(meta.n<minReal){
+        pvpLab.optimizer={status:`ZA MAŁO REALNEGO PVP (${meta.n}/${minReal})`,at:Date.now(),engine,balanceVersion,meta}; pvpLabSave(); return pvpLab.optimizer;
+      }
+
+      const totalPoints=pvpLabMaxAttributePoints();
+      const attrs=['str','end','agi','vit','prc'];
+      const pre=pvpLabPrecomputedSkillPlans(meta), top=[];
+      const pushTop=x=>{
+        if(!x || !Number.isFinite(x.score)) return;
+        top.push(x); top.sort((a,b)=>b.score-a.score); if(top.length>80) top.length=80;
+      };
+      const buildFromAttrs=a=>{
+        const sb={},plan={};
+        for(const k of attrs){ const q=pre[k][a[k]]; plan[k]=q.letters; pvpLabAddBonuses(sb,q.bonus); }
+        const st=pvpLabCandidateStats(a,sb,external,plan);
+        return {attrs:{...a},skillBonus:sb,plan,stats:st,score:pvpLabCandidateScore(st,meta,false)};
+      };
+
+      const floorTier=Math.floor(totalPoints/5);
+      const tierSums=[floorTier,Math.max(0,floorTier-1)];
+      for(const tierSum of tierSums){
+        const rem=totalPoints-t

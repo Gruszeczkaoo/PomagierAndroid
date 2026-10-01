@@ -1,0 +1,59 @@
+:5.4,"crit_resist_percent":16,"stun_resist_percent":16,
+ "evasion_percent":14.25,"double_strike_percent":17.5,"counter_attack_percent":10.5,
+ "healing_reduction_percent":28,"max_hp_percent":0,"hp_regen_flat":0,"bleed_resist_percent":0,
+ "accuracy_percent":88.5,"crit_chance_percent":17,"first_strike_percent":1.75,
+ "execute_threshold_percent":3.05,"lifesteal_percent":1.05,"stun_chance_percent":2.8,"bleed_chance_percent":26.9
+}
+for k,v in expected.items():
+    if abs(base[k]-v)>1e-9:
+        raise SystemExit(f"REGRESJA v6 baseStats {k}: {base[k]} != {v}")
+if abs((55+(50-40)*.5)-60)>1e-9: raise SystemExit("REGRESJA AGI evasion cap")
+if abs((40+(50-40)*1.5)-55)>1e-9: raise SystemExit("REGRESJA AGI double cap")
+if abs((65+(50-40)*1.5)-80)>1e-9: raise SystemExit("REGRESJA PRC crit cap")
+
+checks=[
+  "// @version      8.8.56",
+  "const ANDROID_VERSION = '1.0.49';",
+  "function pvpLabMaxAttributePoints()",
+  "function pvpLabBreakthroughPlan(",
+  "defense_percent:.5525*end",
+  "damage_taken_reduction_percent:.135*end+.15*vit",
+  "max_hp_percent:.95*vit",
+  "crit_bonus_reduction_percent:.2*vit",
+  "crit_resist_bypass_percent:.2*prc",
+  "out.evasion_percent=55+Math.min(10,agi-40)*.5",
+  "out.double_strike_percent=40+Math.min(10,agi-40)*1.5",
+  "out.crit_chance_percent=65+Math.min(10,prc-40)*1.5",
+  "PVP_ENGINE_V2_V6_MECHANICS_REALPVP_V1",
+  "/breakthroughs",
+  "/reset-info",
+  "totalAttributePoints:totalPoints",
+  "breakthroughs:{maxSlots:bt.maxSlots"
+]
+missing=[x for x in checks if x not in s]
+if missing: raise SystemExit("v1.0.49 NIEKOMPLETNA: "+", ".join(missing))
+
+ra,rb=func_bounds(s,"pvpLabRefreshCurrent")
+if "method:'POST'" in s[ra:rb] or 'method:"POST"' in s[ra:rb]:
+    raise SystemExit("PVP V2 refresh nie moze wykonywac POST")
+
+js.write_text(s,encoding="utf-8")
+
+bg=root/"app/build.gradle.kts"
+t=bg.read_text(encoding="utf-8")
+if "versionCode = 10048" not in t or 'versionName = "1.0.48"' not in t:
+    raise SystemExit("Oczekiwano Android 1.0.48")
+t=t.replace("versionCode = 10048","versionCode = 10049",1)
+t=t.replace('versionName = "1.0.48"','versionName = "1.0.49"',1)
+bg.write_text(t,encoding="utf-8")
+
+readme=root/"README.md"
+if readme.exists():
+    r=readme.read_text(encoding="utf-8")
+    if "## v1.0.49 / userscript 8.8.56" not in r:
+        r += """
+
+## v1.0.49 / userscript 8.8.56 - PvP Engine v2 / combatEngine v6
+- Wdrozone wzory z live API Mechaniki dla 5 atrybutow.
+- Dynamiczne capy 41-50 dla AGI/PRC i dynamiczny limit regeneracji VIT.
+- Optimizer uzywa max

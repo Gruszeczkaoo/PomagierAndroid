@@ -1,0 +1,47 @@
+tats:st,score:pvpLabCandidateScore(st,meta,true)};
+        };
+        best=rebuild();
+        for(let pass=0;pass<4;pass++){
+          let improved=false;
+          for(const k of attrs) for(const sel of selections[k]){
+            const old=sel.skill;
+            for(const alt of sel.choices){
+              if(alt===old) continue;
+              sel.skill=alt;
+              const test=rebuild();
+              if(test.score>best.score+1e-9){ best=test; improved=true; }
+              else sel.skill=old;
+            }
+          }
+          if(!improved) break;
+        }
+        return best;
+      };
+
+      const refined=top.slice(0,30).map(refine).sort((a,b)=>b.score-a.score);
+      const curCode=pvpLabCurrentBuild(), currentPlan={};
+      const parts=curCode.split(':')[1]?.split('/')||[];
+      attrs.forEach((k,i)=>currentPlan[k]=parts[i]||'');
+      const currentSkill={};
+      for(const k of attrs){
+        const opts=pvpLabSkillOptions(k,currentAttrs[k]), letters=currentPlan[k]||'';
+        opts.forEach((t,i)=>{ const sk=t.skills.find(x=>x.option===(letters[i]||'')); if(sk) pvpLabAddBonuses(currentSkill,sk.bonuses); });
+      }
+      const curStats=pvpLabCandidateStats(currentAttrs,currentSkill,external,currentPlan);
+      const curScore=pvpLabCandidateScore(curStats,meta,true);
+
+      const ranked=refined.slice(0,10).map((x,i)=>{
+        const bt=pvpLabBreakthroughPlan(x.stats,meta);
+        return {
+          rank:i+1,build:pvpLabBuildCode(x.attrs,x.plan),attrs:x.attrs,plan:x.plan,metaScore:x.score,
+          relativeIndex:x.score/Math.max(1e-9,curScore)*100,
+          combat:{attack:Math.round(x.stats.attack),defense:Math.round(x.stats.defense),maxHp:Math.round(x.stats.maxHp)},
+          effective:{
+            accuracy:x.stats.eff.accuracy_percent,evasion:x.stats.eff.evasion_percent,evasionCap:x.stats.caps.evasion_percent,
+            damageReduction:x.stats.eff.damage_taken_reduction_percent,critResist:x.stats.eff.crit_resist_percent,
+            bleedResist:x.stats.eff.bleed_resist_percent,armorPen:x.stats.eff.armor_pen_percent,
+            critChance:x.stats.eff.crit_chance_percent,critCap:x.stats.caps.crit_chance_percent,
+            doubleStrike:x.stats.eff.double_strike_percent,doubleCap:x.stats.caps.double_strike_percent,
+            counterAttack:x.stats.eff.counter_attack_percent,execute:x.stats.eff.execute_threshold_percent,
+            lifesteal:x.stats.eff.lifesteal_percent,regen:x.stats.regen,regenCap:x.stats.regenBaseCap,
+            cri

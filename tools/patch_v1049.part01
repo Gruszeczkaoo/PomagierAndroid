@@ -1,0 +1,100 @@
+     hp_regen_percent:0,
+      crit_bonus_reduction_percent:.2*vit,
+      crit_resist_bypass_percent:.2*prc,
+      initiative:3+.3*prc
+    };
+  }""")
+
+replace_func("pvpLabCaps",r"""  function pvpLabCaps(attrs=null,maxHp=null){
+    const a=attrs||pvpLabCurrentAttrs()||{};
+    const agi=Number(a.agi||0),prc=Number(a.prc||0),vit=Number(a.vit||0);
+    const server=pvpLab.current?.summary?.statCaps||{};
+    const out={
+      evasion_percent:55,double_strike_percent:40,counter_attack_percent:40,crit_chance_percent:65,
+      armor_pen_percent:50,damage_taken_reduction_percent:60,stun_resist_percent:60,bleed_resist_percent:60,
+      healing_reduction_percent:50,execute_threshold_percent:18,crit_resist_percent:50,accuracy_percent:140,
+      crit_damage_percent:130,lifesteal_percent:30,stun_chance_percent:35
+    };
+    if(agi>40){
+      out.evasion_percent=55+Math.min(10,agi-40)*.5;
+      out.double_strike_percent=40+Math.min(10,agi-40)*1.5;
+    }
+    if(prc>40) out.crit_chance_percent=65+Math.min(10,prc-40)*1.5;
+    for(const k of Object.keys(out)){
+      if(['evasion_percent','double_strike_percent','crit_chance_percent'].includes(k)) continue;
+      if(Number.isFinite(Number(server[k]))) out[k]=Number(server[k]);
+    }
+    if(Number.isFinite(Number(maxHp))) out.hp_regen_flat=vit<=40?20:Math.max(20,Number(maxHp)*(.003*Math.min(10,vit-40)));
+    else out.hp_regen_flat=20;
+    return out;
+  }""")
+
+replace_func("pvpLabEffective",r"""  function pvpLabEffective(v,attrs=null,maxHp=null){
+    const out={...v}, caps=pvpLabCaps(attrs,maxHp);
+    for(const [k,c] of Object.entries(caps)){
+      if(k==='hp_regen_effective' || k==='hp_regen_flat') continue;
+      if(Number.isFinite(Number(out[k]))) out[k]=Math.min(Number(c),Number(out[k]));
+    }
+    return out;
+  }""")
+
+insert_before="  function pvpLabCalibratedCores(){"
+if insert_before not in s:
+    raise SystemExit("Brak miejsca przed pvpLabCalibratedCores")
+helpers=r"""  function pvpLabMaxAttributePoints(){
+    const meta=pvpLab.current?.attributeMeta||{};
+    const n=Number(meta.maxAttributePoints);
+    if(Number.isFinite(n) && n>0) return Math.max(0,Math.min(250,Math.floor(n)));
+    const a=pvpLabCurrentAttrs();
+    return a?Object.values(a).reduce((x,y)=>x+Number(y||0),0):132;
+  }
+
+  function pvpLabConditionalEffects(attrs,plan){
+    const out={attackLow:[],damageReductionLow:[],regenLow:[],appliesBleed:false};
+    if(!attrs || !plan) return out;
+    for(const k of ['str','end','agi','vit','prc']){
+      const opts=pvpLabSkillOptions(k,Number(attrs[k]||0));
+      const letters=String(plan[k]||'');
+      opts.forEach((t,i)=>{
+        const sk=t.skills.find(x=>x.option===(letters[i]||'')); if(!sk) return;
+        const b=pvpLabSkillBonuses(sk), thr=Number(b.low_hp_threshold||0);
+        if(Number(b.attack_percent_low_hp||0)>0) out.attackLow.push({value:Number(b.attack_percent_low_hp),threshold:thr||50});
+        if(Number(b.damage_taken_reduction_low_hp_percent||0)>0) out.damageReductionLow.push({value:Number(b.damage_taken_reduction_low_hp_percent),threshold:thr||50});
+        if(Number(b.hp_regen_low_hp_flat||0)>0) out.regenLow.push({value:Number(b.hp_regen_low_hp_flat),threshold:thr||50});
+        if(Number(b.applies_bleed||0)>0) out.appliesBleed=true;
+      });
+    }
+    return out;
+  }
+
+  function pvpLabBreakthroughData(){
+    return pvpLab.current?.breakthroughs?.data||pvpLab.current?.breakthroughs||null;
+  }
+  function pvpLabBreakthroughRawValue(stats,id){
+    const r=stats?.raw||{};
+    const pct=k=>Number(r[k]||0)/100;
+    if(id==='hpRegen') return Number(stats?.regenRaw||0);
+    if(id==='critChance') return pct('crit_chance_percent');
+    if(id==='critDamage') return pct('crit_damage_percent');
+    if(id==='executeThreshold') return pct('execute_threshold_percent');
+    if(id==='armorPen') return pct('armor_pen_percent');
+    if(id==='doubleStrike') return pct('double_strike_percent');
+    if(id==='stunChance') return pct('stun_chance_percent');
+    if(id==='accuracy') return pct('accuracy_percent');
+    if(id==='evasion') return pct('evasion_percent');
+    if(id==='critResist') return pct('crit_resist_percent');
+    if(id==='counterAttack') return pct('counter_attack_percent');
+    if(id==='damageReduction') return pct('damage_taken_reduction_percent');
+    if(id==='lifesteal') return pct('lifesteal_percent');
+    if(id==='healingReduction') return pct('healing_reduction_percent');
+    if(id==='bleedResist') return pct('bleed_resist_percent');
+    if(id==='stunResist') return pct('stun_resist_percent');
+    return 0;
+  }
+  function pvpLabBreakthroughCap(stats,id,def){
+    const c=stats?.caps||{};
+    const m={
+      hpRegen:'hp_regen_flat',critChance:'crit_chance_percent',critDamage:'crit_damage_percent',
+      executeThreshold:'execute_threshold_percent',armorPen:'armor_pen_percent',doubleStrike:'double_strike_percent',
+      stunChance:'stun_chance_percent',accuracy:'accuracy_percent',evasion:'evasion_percent',critResist:'crit_resist_percent',
+      counterAt

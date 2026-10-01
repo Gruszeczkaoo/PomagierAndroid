@@ -221,6 +221,13 @@ jobs:
             python "$GITHUB_WORKSPACE/tools/patch_v1048.py" "$PROJECT_DIR"
           fi
 
+          if compgen -G "$GITHUB_WORKSPACE/tools/patch_v1049.part*" > /dev/null; then
+            echo "Nakładam aktualizację v1.0.49..."
+            cat "$GITHUB_WORKSPACE"/tools/patch_v1049.part* > /tmp/patch_v1049.py
+            python -m py_compile /tmp/patch_v1049.py
+            python /tmp/patch_v1049.py "$PROJECT_DIR"
+          fi
+
 
 
           VERSION="$(

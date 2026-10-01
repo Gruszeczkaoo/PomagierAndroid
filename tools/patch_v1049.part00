@@ -1,0 +1,104 @@
+from pathlib import Path
+import sys,re,math
+
+root=Path(sys.argv[1]) if len(sys.argv)>1 else Path(".")
+js=root/"app/src/main/assets/pomagier.user.js"
+if not js.exists():
+    raise SystemExit("Brak userscriptu")
+s=js.read_text(encoding="utf-8")
+
+if "// @version      8.8.55" not in s:
+    raise SystemExit("Oczekiwano JS 8.8.55")
+s=s.replace("// @version      8.8.55","// @version      8.8.56",1)
+s=s.replace("const VERSION = '8.8.55';","const VERSION = '8.8.56';",1)
+s=s.replace("const ANDROID_VERSION = '1.0.48';","const ANDROID_VERSION = '1.0.49';",1)
+
+note="""  // v8.8.56 PVP ENGINE V2/V6:
+  // - wdrozone wzory z serwerowej zakladki Mechaniki dla STR/END/AGI/VIT/PRC (combatEngine v6),
+  // - poprawione bazowe przyrosty END/VIT oraz krytyk/bleed/accuracy zgodnie z live API,
+  // - dynamiczne capy 41-50: AGI unik 55->60, double 40->55; PRC crit 65->80; VIT regen do 3% maxHP,
+  // - optimizer korzysta z pelnego maxAttributePoints z API (obecnie 136), a nie starego zalozenia 132,
+  // - model uwzglednia 15 rund, 75% kontry, pasywna redukcje z uniku, crit-resist bypass PRC,
+  //   oslabienie krytykow przez VIT, first strike, momentum, bleed, stun, execute, lifesteal i low-HP efekty,
+  // - pobierane i oceniane sa Przelamania; optimizer proponuje maks. 3 aktywne sloty na podstawie realnego overflow,
+  // - Breakthroughs/reset-info sa zbierane read-only; zadnych resetow, wydawania zebow ani automatycznej zmiany buildu.
+"""
+anchor="  // v8.8.55"
+p=s.find(anchor)
+if p>=0 and note not in s:
+    s=s[:p]+note+s[p:]
+
+def func_bounds(text,name):
+    m=re.search(r"^  (?:async )?function "+re.escape(name)+r"\(",text,re.M)
+    if not m:
+        raise SystemExit("Brak funkcji "+name)
+    n=re.search(r"^  (?:async )?function [A-Za-z0-9_]+\(",text[m.end():],re.M)
+    return m.start(), (m.end()+n.start()) if n else len(text)
+
+def replace_func(name,code):
+    global s
+    a,b=func_bounds(s,name)
+    s=s[:a]+code.rstrip()+"\n\n"+s[b:]
+
+# API: breakthroughs/reset-info as read-only first-class data.
+a,b=func_bounds(s,"pvpLabApiKind")
+seg=s[a:b]
+needle="    if(/\\/api\\/pvp\\/\\d+\\/skill-tree\\/(?:str|end|agi|vit|prc)$/.test(p)) return 'pvp_skill_tree';"
+if needle not in seg:
+    raise SystemExit("Brak skill-tree w pvpLabApiKind")
+seg=seg.replace(needle,needle+"\n    if(/\\/api\\/pvp\\/\\d+\\/breakthroughs$/.test(p)) return 'pvp_breakthroughs';\n    if(/\\/api\\/pvp\\/\\d+\\/reset-info$/.test(p)) return 'pvp_reset_info';",1)
+s=s[:a]+seg+s[b:]
+
+scan_anchor="      '/api/pvp/'+id+'/build',"
+if scan_anchor in s and "'/api/pvp/'+id+'/breakthroughs'" not in s:
+    s=s.replace(scan_anchor,scan_anchor+"\n      '/api/pvp/'+id+'/breakthroughs',\n      '/api/pvp/'+id+'/reset-info',",1)
+
+replace_func("pvpLabSetCurrent",r"""  function pvpLabSetCurrent(kind,data){
+    const now=Date.now();
+    if(kind==='pvp_attributes'){
+      pvpLab.current.attributes=data?.attributes||data||null;
+      if(data && typeof data==='object'){
+        const meta={...data};
+        delete meta.attributes;
+        pvpLab.current.attributeMeta=meta;
+      }
+      pvpLab.current.attributesAt=now;
+    }
+    else if(kind==='pvp_summary'){ pvpLab.current.summary=data||null; pvpLab.current.summaryAt=now; }
+    else if(kind==='pvp_build'){ const b=String(data?.build||'').trim(); if(b) pvpLab.current.build=b; pvpLab.current.buildAt=now; }
+    else if(kind==='pvp_breakthroughs'){ pvpLab.current.breakthroughs=data||null; pvpLab.current.breakthroughsAt=now; }
+    else if(kind==='pvp_reset_info'){ pvpLab.current.resetInfo=data||null; pvpLab.current.resetInfoAt=now; }
+    pvpLabSave();
+  }""")
+
+obs_needle="      if(kind==='pvp_skill_tree'){ const m=pvpLabUrl(url)?.pathname.match(/skill-tree\\/(str|end|agi|vit|prc)$/); if(m) pvpLabStoreSkillTree(m[1],data); return; }"
+if obs_needle not in s:
+    raise SystemExit("Brak pvp_skill_tree w observerze")
+s=s.replace(obs_needle,obs_needle+"\n      if(kind==='pvp_breakthroughs' || kind==='pvp_reset_info'){ pvpLabSetCurrent(kind,data); return; }",1)
+
+replace_func("pvpLabBaseVector",r"""  function pvpLabBaseVector(a){
+    const str=Number(a.str||0),end=Number(a.end||0),agi=Number(a.agi||0),vit=Number(a.vit||0),prc=Number(a.prc||0);
+    return {
+      attack_percent:.45*str,
+      crit_damage_percent:10+.6*str+.5*prc,
+      armor_pen_percent:.3*str+.15*prc,
+      defense_percent:.5525*end,
+      damage_taken_reduction_percent:.135*end+.15*vit,
+      crit_resist_percent:.4*end,
+      stun_resist_percent:.4*end,
+      evasion_percent:2+.35*agi,
+      double_strike_percent:.5*agi,
+      counter_attack_percent:.3*agi,
+      healing_reduction_percent:.8*agi,
+      max_hp_percent:.95*vit,
+      hp_regen_flat:.15*vit,
+      bleed_resist_percent:.5*vit,
+      accuracy_percent:85+.5*prc,
+      crit_chance_percent:3+.5*prc+.3*agi,
+      first_strike_percent:.25*prc,
+      execute_threshold_percent:2+.15*prc,
+      lifesteal_percent:.15*prc,
+      stun_chance_percent:.4*prc,
+      bleed_chance_percent:.3*str+.3*agi+.2*prc,
+      attack_per_turn_percent:0,
+ 

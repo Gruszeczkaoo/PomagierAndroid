@@ -1,0 +1,13 @@
+AttributePoints z serwera (136 w zeskanowanym koncie), nie starego 132.
+- Uwzglednia v6: 15 rund, evasion DR, 75% counter, double, crit bypass, VIT crit reduction, bleed, stun, execute, momentum, first strike, lifesteal i low-HP.
+- Read-only /breakthroughs i /reset-info; rekomendacja 3 slotow Przelaman na podstawie overflow.
+- Guard na zmiane combatEngine/balanceVersion: stary model nie liczy po cichu nowego balansu.
+"""
+    readme.write_text(r,encoding="utf-8")
+
+print("v1.0.49 PvP Engine v2/v6 applied")
+print("OK: exact v6 baseStats regression 50/40/35/0/7")
+print("OK: dynamic AGI/PRC caps")
+print("OK: maxAttributePoints dynamic")
+print("OK: breakthroughs read-only + recommendation")
+print("OK: PvP refresh is GET-only")

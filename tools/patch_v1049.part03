@@ -1,0 +1,89 @@
+       bleedResist:wmed('bleedResist',22),
+        bleedChance:wmed('bleedChance',35),
+        stunResist:wmed('stunResist',20),
+        stunChance:wmed('stunChance',10),
+        healingReduction:wmed('healingReduction',25),
+        armorPen:wmed('armorPen',28),
+        counterAttack:wmed('counterAttack',25),
+        doubleStrike:wmed('doubleStrike',30)
+      },"""
+new_opp="""      opponent:{
+        attack:wmed('attack',Number(pvpLab.current?.summary?.combatStats?.attack||700)),
+        defense:wmed('defense',Number(pvpLab.current?.summary?.combatStats?.defense||650)),
+        maxHp:oppHp ?? Number(pvpLab.current?.summary?.combatStats?.maxHp||1600),
+        evasion:oppEvasion,
+        accuracy:oppAccuracy,
+        critResist:oppCritResist,
+        critChance:wmed('critChance',30),
+        critDamage:wmed('critDamage',65),
+        bleedResist:wmed('bleedResist',22),
+        bleedChance:wmed('bleedChance',35),
+        stunResist:wmed('stunResist',20),
+        stunChance:wmed('stunChance',10),
+        healingReduction:wmed('healingReduction',25),
+        armorPen:wmed('armorPen',28),
+        counterAttack:wmed('counterAttack',25),
+        doubleStrike:wmed('doubleStrike',30),
+        lifesteal:wmed('lifesteal',0),
+        regen:wmed('hpRegen',0),
+        execute:wmed('executeThreshold',0),
+        firstStrike:wmed('firstStrikeBonus',0),
+        initiative:wmed('initiative',3),
+        damageReduction:(()=>{ const d=wmed('damageTakenReduction',null); if(d!=null) return d; const m=wmed('damageTakenMult',null); return m!=null?Math.max(0,100-m):20; })()
+      },"""
+if old_opp not in s:
+    raise SystemExit("Nie znaleziono starego opponent model")
+s=s.replace(old_opp,new_opp,1)
+
+replace_func("pvpLabCandidateScore",r"""  function pvpLabCandidateScore(stats,meta,includeBreakthrough=false){
+    if(!stats) return -Infinity;
+    const c=stats.eff||{}, r=stats.raw||{}, o=meta.opponent||{};
+    const turns=pvpLabClamp(Number(meta.medianTurns||12),6,15);
+    const cap=(x,a,b)=>Math.max(a,Math.min(b,Number(x)||0));
+
+    const hit=cap((Number(c.accuracy_percent||0)-Number(o.evasion||25))/100,.05,1);
+    const enemyHit=cap((Number(o.accuracy||110)-Number(c.evasion_percent||0))/100,.05,1);
+    const myEvadeDR=cap(Number(stats.evasionDamageReductionPercent||0)/100,0,.25);
+    const oppEvadeDR=cap(Number(o.evasion||0)/350,0,.25);
+
+    const oppCritRes=Math.max(0,Number(o.critResist||20))*(1-cap(Number(stats.critResistBypassPercent||0)/100,0,.25));
+    const crit=cap((Number(c.crit_chance_percent||0)-oppCritRes)/100,0,Number(stats.caps?.crit_chance_percent||65)/100);
+    const myCritBonus=cap(Number(c.crit_damage_percent||0)/100,0,1.30);
+
+    const myCritRes=Math.max(0,Number(c.crit_resist_percent||0));
+    const enemyCrit=cap((Number(o.critChance||30)-myCritRes)/100,0,.80);
+    const enemyCritBonus=cap(Number(o.critDamage||65)/100,0,1.30)*(1-cap(Number(stats.critBonusReductionPercent||0)/100,0,.25));
+
+    const direct=(atk,def,pen,dr,evasionDr)=>{
+      const ed=Math.max(0,Number(def)||0)*(1-cap(Number(pen||0)/100,0,.60));
+      return Math.max(1,Number(atk)||0)*(1000/(1000+ed))*(1-cap(Number(dr||0)/100,0,.70))*(1-cap(evasionDr,0,.25))*(2/3);
+    };
+
+    const cond=stats.conditional||{};
+    const uptime=x=>cap((Number(x.threshold||0)/100)*.55,0,.55);
+    let lowAtkF=1;
+    for(const x of (cond.attackLow||[])) lowAtkF*=1+(Number(x.value||0)/100)*uptime(x);
+    let lowDrF=1;
+    for(const x of (cond.damageReductionLow||[])) lowDrF*=1-(Number(x.value||0)/100)*uptime(x);
+    let lowRegen=0;
+    for(const x of (cond.regenLow||[])) lowRegen+=Number(x.value||0)*uptime(x);
+
+    const momentum=1+Math.max(0,Number(r.attack_per_turn_percent||0))*Math.max(0,(turns-1)/2)/100;
+    const firstStrike=1+Math.max(0,Number(c.first_strike_percent||0))/100/Math.max(1,turns);
+    const basicBase=direct(stats.attack*lowAtkF,Number(o.defense||650),c.armor_pen_percent,Number(o.damageReduction||20),oppEvadeDR);
+    const critF=1+crit*myCritBonus;
+    const basicDpt=basicBase*hit*critF*momentum*firstStrike;
+    const doubleP=cap(Number(c.double_strike_percent||0)/100,0,Number(stats.caps?.double_strike_percent||40)/100);
+    const secondDpt=basicBase*doubleP*hit*critF*momentum;
+    const counterChance=cap(Number(c.counter_attack_percent||0)/100,0,.40);
+    const counterDpt=basicBase*.75*(1-enemyHit)*counterChance*critF*momentum;
+
+    const bleedNormal=cap((Number(c.bleed_chance_percent||0)-Number(o.bleedResist||0))/100,0,.95);
+    const bleedCrit=(cond.appliesBleed?crit*cap(1-Number(o.bleedResist||0)/100,0,1):0);
+    const bleedPerContact=1-(1-bleedNormal)*(1-bleedCrit);
+    const contacts=Math.max(.2,hit*(1+doubleP)*Math.min(turns,5));
+    const bleedActive=1-Math.pow(1-bleedPerContact,contacts);
+    const bleedDpt=Math.max(0,Number(o.maxHp||meta.medianOpponentHp||1600))*.02*bleedActive*.62;
+
+    const stunP=cap(Number(c.stun_chance_percent||0)/100,0,.35)*hit*cap(1-Number(o.stunResist||0)/100,0,1);
+    const stunActionsSaved=Math.min(1,stunP*Math.max(1,

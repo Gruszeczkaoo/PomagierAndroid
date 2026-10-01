@@ -1,0 +1,54 @@
+breakthroughs);
+    await sleep(70);
+    const resetInfo=await apiActive(`/api/pvp/${id}/reset-info`).catch(()=>null);
+    if(resetInfo) pvpLabSetCurrent('pvp_reset_info',resetInfo);
+    await pvpLabRefreshSkillTrees();
+  }""")
+
+s=s.replace("⚔ PvP Lab META","⚔ PvP Engine v2 • V6",1)
+s=s.replace("🧠 BEST BUILD — REALNE PvP 1:1","🧠 BEST BUILD — V6 MECHANICS + REALNE PvP",1)
+
+needle="    const bestMeta=opt.status==='OK'&&opt.best"
+idx=s.find(needle)
+if idx<0: raise SystemExit("Brak bestMeta w PvP HTML")
+ret=s.find("    return `",idx)
+if ret<0: raise SystemExit("Brak return po bestMeta")
+if "const engineMeta=" not in s[idx:ret]:
+    extra="""    const engineMeta=opt.status==='OK'
+      ? `<div class="sub"><b>ENGINE ${esc(opt.combatEngine||'v6')}</b> • balans ${esc(opt.balanceVersion||'—')} • punkty ${Number(opt.current?.usedPoints||0)}/${Number(opt.totalAttributePoints||0)} • Przełamania BEST: ${esc((opt.best?.breakthroughs?.recommendedNames||[]).join(' / ')||'brak aktywnych')}</div>`
+      : '';
+"""
+    s=s[:ret]+extra+s[ret:]
+
+s=s.replace("${bestMeta}<div class=\"sub\">CEL: REALNE PvP 1:1", "${bestMeta}${engineMeta}<div class=\"sub\">CEL: REALNE PvP 1:1",1)
+s=s.replace("Optimizer: ${esc(opt.status||'CZEKA')}. Synchronizacja pobierze historię PRESTIŻ", "Optimizer v2: ${esc(opt.status||'CZEKA')}. Synchronizacja pobierze historię PRESTIŻ",1)
+s=s.replace("attributes, summary, build i 5 skill-tree.", "attributes, summary, build, breakthroughs, reset-info i 5 skill-tree.",1)
+
+# Regression against uploaded v6 scan (50/40/35/0/7 baseStats).
+str_,end_,agi,vit,prc=50,40,35,0,7
+base={
+ "attack_percent":.45*str_,
+ "crit_damage_percent":10+.6*str_+.5*prc,
+ "armor_pen_percent":.3*str_+.15*prc,
+ "defense_percent":.5525*end_,
+ "damage_taken_reduction_percent":.135*end_+.15*vit,
+ "crit_resist_percent":.4*end_,
+ "stun_resist_percent":.4*end_,
+ "evasion_percent":2+.35*agi,
+ "double_strike_percent":.5*agi,
+ "counter_attack_percent":.3*agi,
+ "healing_reduction_percent":.8*agi,
+ "max_hp_percent":.95*vit,
+ "hp_regen_flat":.15*vit,
+ "bleed_resist_percent":.5*vit,
+ "accuracy_percent":85+.5*prc,
+ "crit_chance_percent":3+.5*prc+.3*agi,
+ "first_strike_percent":.25*prc,
+ "execute_threshold_percent":2+.15*prc,
+ "lifesteal_percent":.15*prc,
+ "stun_chance_percent":.4*prc,
+ "bleed_chance_percent":.3*str_+.3*agi+.2*prc,
+}
+expected={
+ "attack_percent":22.5,"crit_damage_percent":43.5,"armor_pen_percent":16.05,"defense_percent":22.1,
+ "damage_taken_reduction_percent"

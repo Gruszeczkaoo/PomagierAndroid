@@ -1,0 +1,97 @@
+tack:'counter_attack_percent',damageReduction:'damage_taken_reduction_percent',lifesteal:'lifesteal_percent',
+      healingReduction:'healing_reduction_percent',bleedResist:'bleed_resist_percent',stunResist:'stun_resist_percent'
+    };
+    const k=m[id];
+    if(k && Number.isFinite(Number(c[k]))) return id==='hpRegen'?Number(c[k]):Number(c[k])/100;
+    return Number(def?.cap||0);
+  }
+  function pvpLabBreakthroughValue(def,rank){
+    if(rank<=0) return 0;
+    const vals=Array.isArray(def?.values)?def.values.map(Number).filter(Number.isFinite):[];
+    if(rank<=vals.length) return Number(vals[rank-1]||0);
+    const last=Number(vals.at(-1)||0), mx=Number(def?.maxValue||last);
+    const maxRank=Math.max(vals.length,Number(def?.maxTestRank||10));
+    if(maxRank<=vals.length) return mx;
+    const f=Math.min(1,Math.max(0,(rank-vals.length)/(maxRank-vals.length)));
+    return last+(mx-last)*f;
+  }
+  function pvpLabBreakthroughPlan(stats,meta){
+    const data=pvpLabBreakthroughData(), defs=Array.isArray(data?.definitions)?data.definitions:[];
+    const maxSlots=Math.max(0,Math.min(3,Number(data?.maxSlots??3)));
+    const weights={
+      hpRegen:1.15,critChance:1.00,critDamage:.85,executeThreshold:1.15,armorPen:1.05,doubleStrike:1.25,
+      stunChance:.85,accuracy:.75,evasion:1.10,critResist:1.10,counterAttack:.90,damageReduction:1.35,
+      lifesteal:1.05,healingReduction:.65,bleedResist:.80,stunResist:.70
+    };
+    const eligible=[];
+    for(const def of defs){
+      const raw=pvpLabBreakthroughRawValue(stats,def.id), cap=pvpLabBreakthroughCap(stats,def.id,def);
+      const overflow=Math.max(0,raw-cap), thresholds=Array.isArray(def.tierThresholds)?def.tierThresholds.map(Number):[];
+      let rank=0;
+      for(const t of thresholds){ if(Number.isFinite(t) && overflow+1e-12>=t) rank++; else break; }
+      if(rank<=0) continue;
+      const value=pvpLabBreakthroughValue(def,rank);
+      const utility=Math.max(0,value)*Number(weights[def.id]||.5);
+      eligible.push({id:String(def.id||''),name:String(def.name||def.id||''),rank,value,raw,cap,overflow,utility,description:String(def.description||'')});
+    }
+    eligible.sort((a,b)=>b.utility-a.utility || b.rank-a.rank || a.name.localeCompare(b.name));
+    const slots=eligible.slice(0,maxSlots);
+    return {maxSlots,eligible,slots,recommendedIds:slots.map(x=>x.id),recommendedNames:slots.map(x=>x.name),utility:slots.reduce((n,x)=>n+x.utility,0)};
+  }
+
+"""
+if "function pvpLabMaxAttributePoints()" not in s:
+    s=s.replace(insert_before,helpers+insert_before,1)
+
+replace_func("pvpLabCalibratedCores",r"""  function pvpLabCalibratedCores(){
+    const s=pvpLab.current?.summary||{}, a=pvpLabCurrentAttrs(), c=s.combinedStats||{}, combat=s.combatStats||{};
+    if(!a || !combat.attack || !combat.defense || !combat.maxHp) return null;
+    const af=.5*a.str+.5*a.agi+.4*a.prc;
+    const df=1.4025*a.end;
+    const hf=1.5*a.vit;
+    const hpFlat=Number(c.max_hp_flat||0);
+    return {
+      attack:Number(combat.attack)/(1+Number(c.attack_percent||0)/100)-af,
+      defense:Number(combat.defense)/(1+Number(c.defense_percent||0)/100)-df,
+      hp:Number(combat.maxHp)/(1+Number(c.max_hp_percent||0)/100)-hf-hpFlat,
+      hpFlat
+    };
+  }""")
+
+replace_func("pvpLabCandidateStats",r"""  function pvpLabCandidateStats(attrs,skillBonus,external,plan=null){
+    const raw=pvpLabBaseVector(attrs);
+    pvpLabAddBonuses(raw,external);
+    pvpLabAddBonuses(raw,skillBonus);
+    const cores=pvpLabCalibratedCores();
+    if(!cores) return null;
+
+    const af=.5*Number(attrs.str||0)+.5*Number(attrs.agi||0)+.4*Number(attrs.prc||0);
+    const df=1.4025*Number(attrs.end||0);
+    const hf=1.5*Number(attrs.vit||0);
+    const attack=(cores.attack+af)*(1+Number(raw.attack_percent||0)/100);
+    const defense=(cores.defense+df)*(1+Number(raw.defense_percent||0)/100);
+    const maxHp=(cores.hp+hf+Number(raw.max_hp_flat||cores.hpFlat||0))*(1+Number(raw.max_hp_percent||0)/100);
+
+    const caps=pvpLabCaps(attrs,maxHp);
+    const eff=pvpLabEffective(raw,attrs,maxHp);
+    const regenRaw=Number(raw.hp_regen_flat||0)+maxHp*Math.max(0,Number(raw.hp_regen_percent||0))/100;
+    const regenBaseCap=Number(caps.hp_regen_flat||20);
+    const regen=Math.min(regenBaseCap,regenRaw);
+    const roundCap=Math.max(20,Number(pvpLab.current?.summary?.hpRegenRoundCap||((pvpLab.current?.attributeMeta?.characterLevel||0)*2)||20));
+    const conditional=pvpLabConditionalEffects(attrs,plan);
+
+    return {
+      attrs:{...attrs},raw,eff,caps,attack,defense,maxHp,regen,regenRaw,regenBaseCap,roundCap,conditional,
+      initiative:Number(raw.initiative||0),
+      evasionDamageReductionPercent:Number(eff.evasion_percent||0)/3.5,
+      critBonusReductionPercent:Number(raw.crit_bonus_reduction_percent||0),
+      critResistBypassPercent:Number(raw.crit_resist_bypass_percent||0)
+    };
+  }""")
+
+old_opp="""      opponent:{
+        evasion:oppEvasion,
+        accuracy:oppAccuracy,
+        critResist:oppCritResist,
+        critChance:wmed('critChance',30),
+ 

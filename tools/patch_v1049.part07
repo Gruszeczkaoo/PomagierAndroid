@@ -1,0 +1,45 @@
+tResistBypass:x.stats.critResistBypassPercent,critBonusReduction:x.stats.critBonusReductionPercent,
+            initiative:x.stats.initiative
+          },
+          breakthroughs:{maxSlots:bt.maxSlots,recommendedIds:bt.recommendedIds,recommendedNames:bt.recommendedNames,eligible:bt.eligible}
+        };
+      });
+
+      const curBt=pvpLabBreakthroughPlan(curStats,meta);
+      pvpLab.optimizer={
+        status:'OK',at:Date.now(),durationMs:Date.now()-started,
+        method:'PVP_ENGINE_V2_V6_MECHANICS_REALPVP_V1',
+        combatEngine:engine||'v6',balanceVersion:balanceVersion||expectedBalance,
+        totalAttributePoints:totalPoints,
+        realPvpObjective:true,sourceWeights:{prestige:1,normal:1,arena:0,arena_test:0},arenaUsed:false,
+        meta,
+        current:{
+          build:curCode,attrs:currentAttrs,usedPoints:Object.values(currentAttrs).reduce((x,y)=>x+Number(y||0),0),
+          availablePoints:totalPoints,relativeIndex:100,
+          combat:curStats?{attack:Math.round(curStats.attack),defense:Math.round(curStats.defense),maxHp:Math.round(curStats.maxHp)}:null,
+          breakthroughs:{recommendedIds:curBt.recommendedIds,recommendedNames:curBt.recommendedNames,eligible:curBt.eligible}
+        },
+        best:ranked[0]||null,top:ranked,
+        searchNote:`V6 live mechanics • ${totalPoints} pkt • dynamic capy 41-50 • low-HP/bleed/stun/execute/lifesteal • Przelamania max ${Number(pvpLabBreakthroughData()?.maxSlots??3)} • PRESTIZ i zwykle PvP 1:1 • Arena=0`
+      };
+      pvpLabSave();
+      return pvpLab.optimizer;
+    }catch(e){
+      pvpLab.optimizer={status:'BŁĄD OPTIMIZERA V2',error:String(e?.message||e),at:Date.now()};
+      pvpLabRecordError('optimizer_v2',e); pvpLabSave(); return pvpLab.optimizer;
+    }
+  }""")
+
+replace_func("pvpLabRefreshCurrent",r"""  async function pvpLabRefreshCurrent(){
+    const id=pvpLabOwnId(); if(!id) return;
+    const attrs=await apiActive(`/api/pvp/${id}/attributes`).catch(()=>null);
+    if(attrs) pvpLabSetCurrent('pvp_attributes',attrs);
+    await sleep(70);
+    const summary=await apiActive(`/api/pvp/${id}/summary`).catch(()=>null);
+    if(summary) pvpLabSetCurrent('pvp_summary',summary);
+    await sleep(70);
+    const build=await apiActive(`/api/pvp/${id}/build`).catch(()=>null);
+    if(build) pvpLabSetCurrent('pvp_build',build);
+    await sleep(70);
+    const breakthroughs=await apiActive(`/api/pvp/${id}/breakthroughs`).catch(()=>null);
+    if(breakthroughs) pvpLabSetCurrent('pvp_breakthroughs',

@@ -1,0 +1,55 @@
+ierSum*5;
+        if(rem<0 || rem>9) continue;
+        for(let ts=0;ts<=10;ts++) for(let te=0;te<=10;te++) for(let ta=0;ta<=10;ta++) for(let tv=0;tv<=10;tv++){
+          const tp=tierSum-ts-te-ta-tv; if(tp<0||tp>10) continue;
+          let a={str:ts*5,end:te*5,agi:ta*5,vit:tv*5,prc:tp*5};
+          let cand=buildFromAttrs(a);
+          if(!cand.stats) continue;
+          const base={...a};
+          for(let n=0;n<rem;n++){
+            let bestNext=null;
+            for(const k of attrs){
+              if(a[k]>=50 || a[k]-base[k]>=4) continue;
+              const z={...a,[k]:a[k]+1};
+              const test=buildFromAttrs(z);
+              if(!bestNext || test.score>bestNext.score) bestNext=test;
+            }
+            if(!bestNext) break;
+            a={...bestNext.attrs}; cand=bestNext;
+          }
+          if(Object.values(cand.attrs).reduce((x,y)=>x+y,0)===totalPoints) pushTop(cand);
+        }
+      }
+
+      const refine=(cand)=>{
+        let best={...cand,score:pvpLabCandidateScore(cand.stats,meta,true)};
+        for(let pass=0;pass<5;pass++){
+          let changed=false;
+          for(const from of attrs) for(const to of attrs){
+            if(from===to||best.attrs[from]<=0||best.attrs[to]>=50) continue;
+            const a={...best.attrs,[from]:best.attrs[from]-1,[to]:best.attrs[to]+1};
+            const sb={},plan={};
+            for(const k of attrs){ const q=pre[k][a[k]]; plan[k]=q.letters; pvpLabAddBonuses(sb,q.bonus); }
+            const st=pvpLabCandidateStats(a,sb,external,plan), score=pvpLabCandidateScore(st,meta,true);
+            if(score>best.score+1e-9){ best={attrs:a,skillBonus:sb,plan,stats:st,score}; changed=true; }
+          }
+          if(!changed) break;
+        }
+
+        const selections={};
+        for(const k of attrs){
+          selections[k]=[];
+          for(const t of pvpLabSkillOptions(k,best.attrs[k])){
+            const wanted=(best.plan[k]||'')[selections[k].length]||'A';
+            const sk=t.skills.find(x=>x.option===wanted)||t.skills[0];
+            if(sk) selections[k].push({tier:t.tier,skill:sk,choices:t.skills});
+          }
+        }
+        const rebuild=()=>{
+          const sb={},plan={};
+          for(const k of attrs){
+            plan[k]=selections[k].map(x=>x.skill.option).join('');
+            for(const x of selections[k]) pvpLabAddBonuses(sb,x.skill.bonuses);
+          }
+          const st=pvpLabCandidateStats(best.attrs,sb,external,plan);
+          return {attrs:{...best.attrs},skillBonus:sb,plan,s
