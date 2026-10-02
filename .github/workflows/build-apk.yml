@@ -274,6 +274,45 @@ jobs:
           print("XML OK")
           PY
 
+      - name: Prepare source handoff
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf handoff_source
+          mkdir -p "handoff_source/CURRENT_SOURCE_v${POMAGIER_VERSION}"
+          mkdir -p handoff_source/REPO_HISTORY
+          cp -a "$PROJECT_DIR"/. "handoff_source/CURRENT_SOURCE_v${POMAGIER_VERSION}/"
+
+          cp -a tools handoff_source/REPO_HISTORY/
+          mkdir -p handoff_source/REPO_HISTORY/.github/workflows
+          cp -a .github/workflows/build-apk.yml handoff_source/REPO_HISTORY/.github/workflows/
+          cp -a github handoff_source/REPO_HISTORY/ 2>/dev/null || true
+          cp -a pomagier.user.js handoff_source/REPO_HISTORY/ 2>/dev/null || true
+          cp -a README.md handoff_source/REPO_HISTORY/ 2>/dev/null || true
+          cp -a PomagierAndroid_v*.zip handoff_source/REPO_HISTORY/ 2>/dev/null || true
+
+          {
+            echo "Pomagier by Don - source handoff"
+            echo "Generated: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "Version: ${POMAGIER_VERSION}"
+            echo "Git HEAD: $(git rev-parse HEAD)"
+            echo
+            echo "CURRENT_SOURCE_v${POMAGIER_VERSION}: fully patched Android Studio source used for this build."
+            echo "REPO_HISTORY: historical Android source ZIPs, patch chain, workflows and root userscript."
+            echo
+            echo "Tracked files:"
+            git ls-files
+          } > handoff_source/SOURCE_MANIFEST.txt
+
+      - name: Upload source handoff artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pomagier-source-handoff-v${{ env.POMAGIER_VERSION }}
+          path: handoff_source/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 30
+
       - name: Build signed release APK
         shell: bash
         run: |
