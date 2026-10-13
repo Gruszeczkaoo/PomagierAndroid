@@ -36,8 +36,8 @@ class MainActivity : Activity() {
                 setOnClickListener { action() }
             })
         }
-        label("CastleBot by Don v0.2.1", 24f)
-        label("Menu → Battle → wynik → Continue → nagrody → kolejny Battle.")
+        label("CastleBot by Don v0.3.0", 24f)
+        label("Auto-walka: rozpoznaj postać, wykonaj próbę strzału, odbierz nagrodę i rozpocznij kolejną bitwę.")
         button("1. Włącz usługę dostępności") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
@@ -54,10 +54,10 @@ class MainActivity : Activity() {
         }
         button("STOP") { CastleService.instance?.stopBot() }
         root.addView(CheckBox(this).apply {
-            text = "Testowe automatyczne strzały (domyślnie WYŁĄCZONE)"
-            isChecked = prefs.getBoolean("autoShots", false)
+            text = "Automatycznie wybieraj i próbuj strzelać (v0.3)"
+            isChecked = prefs.getBoolean("autoFightV03", true)
             setOnCheckedChangeListener { _, checked ->
-                prefs.edit().putBoolean("autoShots", checked).apply()
+                prefs.edit().putBoolean("autoFightV03", checked).apply()
             }
         })
         button("Wyświetl dziennik działania") {
@@ -75,7 +75,7 @@ class MainActivity : Activity() {
         label("Podczas gry mały panel DON / STOP można przeciągać po ekranie. Dotknij DON, aby rozwinąć START / KAL / TEST. " +
             "KAL zapisuje gest pomiędzy dwoma wskazanymi dotknięciami. " +
             "TEST wykonuje go jeden raz. Nie włączaj auto-strzałów przed testem.")
-        label("Wersja testowa: nie ma jeszcze inteligentnego celowania. " +
+        label("v0.3 próbuje strzelać na podstawie białego znacznika jednostki. Nie jest to jeszcze inteligentne celowanie. " +
             "Bot nie klika reklam, zakupów ani opcji podwajania nagród. " +
             "Automatyzacja PvP może naruszać regulamin gry.")
     }

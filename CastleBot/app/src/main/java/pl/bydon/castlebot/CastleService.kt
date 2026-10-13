@@ -87,6 +87,8 @@ class CastleService : AccessibilityService() {
         phaseFrames = 0
         phaseClicks = 0
         lastShotRound = -1
+        lastCardRound = -1
+        lastCardTapAt = 0L
         setPanelState()
         log("START")
         toast("CastleBot START")
@@ -148,7 +150,7 @@ class CastleService : AccessibilityService() {
                     (has("BATTLE") && has("SUCCESSFUL")) || has("VICTORY") ||
                         has("DEFEAT") || (has("BATTLE") && has("FAILED")) -> Screen.RESULT
                     has("TAP TO CONTINUE") -> Screen.REWARD
-                    has("ROUND") && (has("POWER") || has("ANGLE")) -> Screen.MATCH
+                    has("ROUND") && (has("POWER") || has("ANGLE") || Regex("\\b[0-9]{1,2}\\s*/\\s*24\\b").containsMatchIn(whole)) -> Screen.MATCH
                     (has("ARENA") || has("FORGE") || has("RANKING")) &&
                         (has("BATTLE") || isYellowBattle(b)) -> Screen.HOME
                     else -> Screen.UNKNOWN
@@ -157,13 +159,16 @@ class CastleService : AccessibilityService() {
                     phase = current
                     phaseFrames = 1
                     phaseClicks = 0
-                    if (phase == Screen.HOME || phase == Screen.RESULT) lastShotRound = -1
+                    if (phase == Screen.HOME || phase == Screen.RESULT) {
+                        lastShotRound = -1
+                        lastCardRound = -1
+                    }
                     log("Ekran " + current)
                 } else phaseFrames++
                 if (phaseFrames < 2) return@addOnSuccessListener
                 val now = System.currentTimeMillis()
                 if (current == Screen.MATCH) {
-                    if (prefs.getBoolean("autoShots", false)) shotForRound(whole, b.width, b.height, now)
+                    if (prefs.getBoolean("autoFightV03", true)) autoBattleTurn(whole, b, now)
                     return@addOnSuccessListener
                 }
                 if (current == Screen.UNKNOWN || phaseClicks >= 3) return@addOnSuccessListener
@@ -201,18 +206,68 @@ class CastleService : AccessibilityService() {
         }
         return hits > 45
     }
-    private fun shotForRound(txt: String, w: Int, h: Int, now: Long) {
-        if (!prefs.contains("sx") || !prefs.contains("ex")) return
-        val round = Regex("ROUND\\s*(\\d+)\\s*/\\s*(\\d+)")
-            .find(txt)?.groupValues?.getOrNull(1)?.toIntOrNull() ?: return
-        if (round == lastShotRound || now - lastShotAt < 7500) return
-        if (gesture(prefs.getFloat("sx",.3f),prefs.getFloat("sy",.5f),
-                prefs.getFloat("ex",.5f),prefs.getFloat("ey",.5f),w,h,380)) {
-            lastShotRound = round
-            lastShotAt = now
-            log("Testowy strzal w rundzie " + round)
+    // v0.3: first real automatic shot attempts. Visual marker is a white down arrow.
+    // Only one attempt per round: a successful dispatch is not proof of a hit.
+    private var lastCardRound = -1
+    private var lastCardTapAt = 0L
+    private var lastBattleLogAt = 0L
+
+    private fun roundNumber(text: String): Int? {
+        val match = Regex("ROUND\\s*([0-9]{1,2})\\s*/\\s*24").find(text)
+        if (match != null) return match.groupValues[1].toIntOrNull()
+        if (!text.contains("ROUND")) return null
+        return Regex("\\b([0-9]{1,2})\\s*/\\s*24\\b")
+            .find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()
+    }
+
+    private fun autoBattleTurn(text: String, bmp: Bitmap, now: Long) {
+        val round = roundNumber(text)
+        if (round == null) {
+            if (now-lastBattleLogAt>12000) {
+                log("WALKA: nie mogę odczytać numeru rundy")
+                lastBattleLogAt=now
+            }
+            return
+        }
+        if (round !in 1..24 || round == lastShotRound) return
+        if (now-lastShotAt<5500 || now-lastCardTapAt<2400) return
+
+        val hero = BattleVision.findSelectedUnit(bmp)
+        if (hero == null) {
+            if (lastCardRound != round && now-lastCardTapAt>4200) {
+                if (gesture(.528f,.889f,.528f,.889f,bmp.width,bmp.height,75)) {
+                    lastCardRound=round
+                    lastCardTapAt=now
+                    log("Runda " + round + ": wybieram kartę; czekam na znacznik jednostki")
+                }
+            } else if (now-lastBattleLogAt>12000) {
+                log("Runda " + round + ": brak białego znacznika jednostki")
+                lastBattleLogAt=now
+            }
+            return
+        }
+
+        // Basic launch profiles; not yet trajectory prediction.
+        val profiles = arrayOf(
+            floatArrayOf(.22f,-.105f), floatArrayOf(.27f,-.085f),
+            floatArrayOf(.19f,-.135f), floatArrayOf(.24f,-.060f)
+        )
+        val p=profiles[(round-1)%profiles.size]
+        val sx=hero.first.coerceIn(.13f,.72f)
+        val sy=hero.second.coerceIn(.17f,.84f)
+        val ex=(sx+p[0]).coerceIn(.04f,.94f)
+        val ey=(sy+p[1]).coerceIn(.08f,.86f)
+        if (gesture(sx,sy,ex,ey,bmp.width,bmp.height,850)) {
+            lastShotRound=round
+            lastShotAt=now
+            val coords=String.format(Locale.ROOT,"%.3f,%.3f -> %.3f,%.3f",sx,sy,ex,ey)
+            log("Runda " + round + ": AUTO gesture " + coords +
+                " (wysłany; trafienie niepotwierdzone)")
+        } else {
+            log("Runda " + round + ": gest nie został wysłany")
         }
     }
+
     private fun gesture(sx:Float,sy:Float,ex:Float,ey:Float,w:Int,h:Int,ms:Long): Boolean {
         if (!running || !inGame()) return false
         val path = Path()
