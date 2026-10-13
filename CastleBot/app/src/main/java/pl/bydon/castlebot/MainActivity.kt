@@ -36,8 +36,8 @@ class MainActivity : Activity() {
                 setOnClickListener { action() }
             })
         }
-        label("CastleBot by Don v0.3.2", 24f)
-        label("Stabilizacja OCR: odrzucanie podejrzanych przeskoków rund i ostrożniejsze wykrywanie jednostki.")
+        label("CastleBot by Don v0.3.3", 24f)
+        label("Obsługa płatnych okien (zamknij X), kalibracja ruchu strzału oraz stabilizacja OCR.")
         button("1. Włącz usługę dostępności") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
@@ -74,7 +74,7 @@ class MainActivity : Activity() {
         }
         label("Podczas gry mały panel DON / STOP można przeciągać po ekranie. Dotknij DON, aby rozwinąć START / KAL / TEST. " +
             "KAL zapisuje gest pomiędzy dwoma wskazanymi dotknięciami. " +
-            "TEST wykonuje go jeden raz. Nie włączaj auto-strzałów przed testem.")
+            "TEST wykonuje gest testowy. Kalibracja KAL wpływa teraz także na gest auto-strzału.")
         label("v0.3 próbuje strzelać na podstawie białego znacznika jednostki. Nie jest to jeszcze inteligentne celowanie. " +
             "Bot nie klika reklam, zakupów ani opcji podwajania nagród. " +
             "Automatyzacja PvP może naruszać regulamin gry.")

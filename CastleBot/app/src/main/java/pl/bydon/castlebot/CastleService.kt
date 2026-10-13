@@ -31,7 +31,7 @@ class CastleService : AccessibilityService() {
         @Volatile var instance: CastleService? = null
             private set
     }
-    private enum class Screen { HOME, MATCH, RESULT, REWARD, UNKNOWN }
+    private enum class Screen { HOME, MATCH, RESULT, REWARD, POPUP, UNKNOWN }
     private val handler = Handler(Looper.getMainLooper())
     private val ocr = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
     private val prefs by lazy { getSharedPreferences("bot", Context.MODE_PRIVATE) }
@@ -57,6 +57,8 @@ class CastleService : AccessibilityService() {
     private var cachedRoundAt = 0L
     private var lastMatchDebugAt = 0L
     private var lastRejectedRoundLogAt = 0L
+    private var lastPopupLogAt = 0L
+    private var latestPopupClose: Pair<Float, Float>? = null
     private var lastShotReviewRound = -1
     private val tracker = RoundTracker()
     private val tick = object : Runnable {
@@ -102,6 +104,7 @@ class CastleService : AccessibilityService() {
         lastMatchDebugAt = 0L
         lastShotReviewRound = -1
         tracker.reset()
+        togglePanel(false)
         setPanelState()
         log("START")
         toast("CastleBot START")
@@ -225,7 +228,24 @@ class CastleService : AccessibilityService() {
             log("RUNDA ZATWIERDZONA " + stableRound +
                 " (HUD=" + hud.take(45) + ")")
         }
+        val closePoint = PopupVision.findClose(b)
+        val namedOffer =
+            has("PYRO") || has("LEGENDARY UNIT") ||
+            has("GET A NEW") || has("46,99") || has("46.99")
+        val genericOffer =
+            (has("SPECIAL OFFER") || has("LIMITED OFFER") ||
+             has("EXCLUSIVE OFFER") || has("ONE TIME OFFER")) &&
+            (has("ZŁ") || has("PLN") || has("BUY"))
+        // Never rely on the background HOME OCR when a purchase offer overlays it.
+        val visiblePaidOffer = namedOffer || genericOffer
+        latestPopupClose = if (visiblePaidOffer) closePoint else null
+        if (visiblePaidOffer && closePoint == null &&
+            now-lastPopupLogAt>12000L) {
+            log("OFERTA wykryta w OCR, ale nie potwierdzono bezpiecznego X; nie dotykam ceny")
+            lastPopupLogAt=now
+        }
         val direct = when {
+            visiblePaidOffer && closePoint != null -> Screen.POPUP
             (has("BATTLE") && has("SUCCESSFUL")) || has("VICTORY") ||
                 has("DEFEAT") || (has("BATTLE") && has("FAILED")) -> Screen.RESULT
             has("TAP TO CONTINUE") -> Screen.REWARD
@@ -236,9 +256,12 @@ class CastleService : AccessibilityService() {
             else -> Screen.UNKNOWN
         }
         if (direct == Screen.MATCH) lastMatchSeenAt = now
-        val current = if (direct == Screen.UNKNOWN &&
-            phase == Screen.MATCH &&
-            now - lastMatchSeenAt < 22000L) Screen.MATCH else direct
+        val current = when {
+            visiblePaidOffer && closePoint == null -> Screen.UNKNOWN
+            direct == Screen.UNKNOWN && phase == Screen.MATCH &&
+                now - lastMatchSeenAt < 22000L -> Screen.MATCH
+            else -> direct
+        }
 
         if (current == Screen.MATCH && now - lastMatchDebugAt >= 10000L) {
             log("MATCH OCR: raw=" + (rawRound ?: "?") +
@@ -251,7 +274,7 @@ class CastleService : AccessibilityService() {
             phase = current
             phaseFrames = 1
             phaseClicks = 0
-            if (phase == Screen.HOME || phase == Screen.RESULT || phase == Screen.REWARD) {
+            if (phase == Screen.HOME || phase == Screen.RESULT || phase == Screen.REWARD || phase == Screen.POPUP) {
                 lastShotRound = -1
                 lastCardRound = -1
                 tracker.reset()
@@ -265,7 +288,11 @@ class CastleService : AccessibilityService() {
             return
         }
         if (current == Screen.UNKNOWN || phaseClicks >= 3) return
-        val delay = if (current == Screen.HOME) 6500 else 3200
+        val delay = when (current) {
+            Screen.HOME -> 6500
+            Screen.POPUP -> 4200
+            else -> 3200
+        }
         if (now - lastClick < delay) return
         fun findClick(word: String, xmin: Float, ymin: Float): Pair<Float, Float>? =
             lines.firstOrNull {
@@ -279,13 +306,15 @@ class CastleService : AccessibilityService() {
             Screen.HOME -> findClick("BATTLE", .65f, .69f) ?: Pair(.89f, .89f)
             Screen.RESULT -> findClick("CONTINUE", .56f, .68f) ?: Pair(.75f, .91f)
             Screen.REWARD -> findClick("CONTINUE", .25f, .68f) ?: Pair(.50f, .89f)
+            Screen.POPUP -> latestPopupClose
             else -> null
         }
         if (point != null && gesture(point.first, point.second,
                 point.first, point.second, b.width, b.height, 90)) {
             phaseClicks++
             lastClick = now
-            log("Tap " + current + " #" + phaseClicks)
+            log("Tap " + current + " #" + phaseClicks +
+                if (current == Screen.POPUP) " bezpieczny X (nigdy cena)" else "")
         }
     }
     private fun isYellowBattle(b: Bitmap): Boolean {
@@ -358,7 +387,15 @@ class CastleService : AccessibilityService() {
             floatArrayOf(.22f,-.105f), floatArrayOf(.27f,-.085f),
             floatArrayOf(.19f,-.135f), floatArrayOf(.24f,-.060f)
         )
-        val p = offsets[(round-1)%offsets.size]
+        val calibrated = prefs.contains("sx") && prefs.contains("sy") &&
+            prefs.contains("ex") && prefs.contains("ey")
+        val calX = prefs.getFloat("ex", 0.0f) - prefs.getFloat("sx", 0.0f)
+        val calY = prefs.getFloat("ey", 0.0f) - prefs.getFloat("sy", 0.0f)
+        val validCal = calibrated &&
+            kotlin.math.abs(calX) in 0.055f..0.55f &&
+            kotlin.math.abs(calY) <= .45f
+        val p = if (validCal) floatArrayOf(calX, calY) else
+            offsets[(round-1)%offsets.size]
         val sx = marker.x.coerceIn(.13f,.72f)
         val sy = marker.y.coerceIn(.17f,.84f)
         val ex = (sx+p[0]).coerceIn(.04f,.94f)
@@ -368,6 +405,7 @@ class CastleService : AccessibilityService() {
         log("CEL rundy " + round + ": strzałka=" +
             String.format(Locale.ROOT,"%.3f,%.3f",marker.x,marker.y) +
             " pewność=" + marker.confidence +
+            " profil=" + (if (validCal) "KALIBRACJA" else "HEURYSTYKA") +
             " gest=" + coordinates)
 
         if (gesture(sx,sy,ex,ey,bmp.width,bmp.height,850,"strzal_runda_"+round)) {
