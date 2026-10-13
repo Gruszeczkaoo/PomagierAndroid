@@ -56,6 +56,9 @@ class CastleService : AccessibilityService() {
     private var cachedRound = -1
     private var cachedRoundAt = 0L
     private var lastMatchDebugAt = 0L
+    private var lastRejectedRoundLogAt = 0L
+    private var lastShotReviewRound = -1
+    private val tracker = RoundTracker()
     private val tick = object : Runnable {
         override fun run() {
             if (running && !busy && calibration == null && inGame()) screenshot()
@@ -97,6 +100,8 @@ class CastleService : AccessibilityService() {
         cachedRoundAt = 0L
         lastMatchSeenAt = 0L
         lastMatchDebugAt = 0L
+        lastShotReviewRound = -1
+        tracker.reset()
         setPanelState()
         log("START")
         toast("CastleBot START")
@@ -145,85 +150,143 @@ class CastleService : AccessibilityService() {
         }
     }
     private fun scan(b: Bitmap) {
+        // Recognize the whole screen, then the ROUND HUD at 2x resolution.
+        // The full-screen OCR alone regularly confuses "4/24" with "8/24".
         ocr.process(InputImage.fromBitmap(b, 0))
-            .addOnSuccessListener { result ->
-                if (!running || !inGame()) return@addOnSuccessListener
-                val whole = result.text.uppercase(Locale.ROOT).replace('\n', ' ')
-                    .replace(Regex("\\s+"), " ")
-                val lines = result.textBlocks.flatMap { it.lines }.mapNotNull { line ->
-                    line.boundingBox?.let { Pair(line.text.uppercase(Locale.ROOT), it) }
+            .addOnSuccessListener { full ->
+                val x = (b.width * .425f).toInt().coerceIn(0, b.width - 1)
+                val y = (b.height * .028f).toInt().coerceIn(0, b.height - 1)
+                val width = (b.width * .16f).toInt().coerceAtMost(b.width - x)
+                val height = (b.height * .14f).toInt().coerceAtMost(b.height - y)
+                val enlarged = try {
+                    val crop = Bitmap.createBitmap(b, x, y, width, height)
+                    val scaled = Bitmap.createScaledBitmap(crop, width * 2, height * 2, true)
+                    crop.recycle()
+                    scaled
+                } catch (e: Exception) {
+                    log("HUD crop failed: " + e.message)
+                    null
                 }
-                fun has(t: String) = whole.contains(t)
-                val now = System.currentTimeMillis()
-                val roundRead = roundNumber(whole)
-                // OCR can lose the ROUND HUD for 1-3 consecutive frames.
-                // Cache the detected round BEFORE waiting for stable-frame confirmation.
-                if (roundRead != null && roundRead in 1..24) {
-                    cachedRound = roundRead
-                    cachedRoundAt = now
-                }
-                val direct = when {
-                    (has("BATTLE") && has("SUCCESSFUL")) || has("VICTORY") ||
-                        has("DEFEAT") || (has("BATTLE") && has("FAILED")) -> Screen.RESULT
-                    has("TAP TO CONTINUE") -> Screen.REWARD
-                    (has("ROUND") || (roundRead != null && has("VS")) ||
-                        (has("POWER") && has("ANGLE"))) -> Screen.MATCH
-                    (has("ARENA") || has("FORGE") || has("RANKING")) &&
-                        (has("BATTLE") || isYellowBattle(b)) -> Screen.HOME
-                    else -> Screen.UNKNOWN
-                }
-                if (direct == Screen.MATCH) lastMatchSeenAt = now
-                // Do not turn MATCH -> UNKNOWN on a single bad screenshot.
-                // Strong HOME/RESULT/REWARD evidence still exits immediately.
-                val current = if (direct == Screen.UNKNOWN &&
-                    phase == Screen.MATCH &&
-                    now - lastMatchSeenAt < 30000L) Screen.MATCH else direct
-                if (current == Screen.MATCH && now-lastMatchDebugAt >= 10000L) {
-                    log("MATCH OCR: round=" + (roundRead?.toString() ?: "?") +
-                        " cached=" + cachedRound + " text=" + whole.take(100))
-                    lastMatchDebugAt=now
-                }
-                if (current != phase) {
-                    phase = current
-                    phaseFrames = 1
-                    phaseClicks = 0
-                    if (phase == Screen.HOME || phase == Screen.RESULT || phase == Screen.REWARD) {
-                        lastShotRound = -1
-                        lastCardRound = -1
-                        cachedRound = -1
-                        cachedRoundAt = 0L
-                    }
-                    log("Ekran " + current + " (OCR=" + whole.take(90) + ")")
-                } else phaseFrames++
-                if (phaseFrames < 2) return@addOnSuccessListener
-                if (current == Screen.MATCH) {
-                    if (prefs.getBoolean("autoFightV03", true)) autoBattleTurn(whole, b, now)
+                if (enlarged == null) {
+                    handleFrame(full, b, "")
+                    b.recycle()
+                    busy = false
                     return@addOnSuccessListener
                 }
-                if (current == Screen.UNKNOWN || phaseClicks >= 3) return@addOnSuccessListener
-                val delay = if (current == Screen.HOME) 6500 else 3200
-                if (now - lastClick < delay) return@addOnSuccessListener
-                fun findClick(word: String, xmin: Float, ymin: Float): Pair<Float, Float>? =
-                    lines.firstOrNull {
-                        it.first.contains(word) &&
-                        it.second.centerX() > b.width * xmin &&
-                        it.second.centerY() > b.height * ymin
-                    }?.second?.let { Pair(it.centerX() / b.width.toFloat(), it.centerY() / b.height.toFloat()) }
-                val point = when (current) {
-                    Screen.HOME -> findClick("BATTLE", .65f, .69f) ?: Pair(.89f, .89f)
-                    Screen.RESULT -> findClick("CONTINUE", .56f, .68f) ?: Pair(.75f, .91f)
-                    Screen.REWARD -> findClick("CONTINUE", .25f, .68f) ?: Pair(.50f, .89f)
-                    else -> null
-                }
-                if (point != null && gesture(point.first,point.second,point.first,point.second,
-                        b.width,b.height,90)) {
-                    phaseClicks++
-                    lastClick = now
-                    log("Tap " + current + " #" + phaseClicks)
-                }
+                ocr.process(InputImage.fromBitmap(enlarged, 0))
+                    .addOnSuccessListener { hud ->
+                        handleFrame(full, b, hud.text.uppercase(Locale.ROOT))
+                    }
+                    .addOnFailureListener {
+                        log("HUD OCR failed: " + it.message)
+                        handleFrame(full, b, "")
+                    }
+                    .addOnCompleteListener {
+                        enlarged.recycle()
+                        b.recycle()
+                        busy = false
+                    }
             }
-            .addOnFailureListener { log("OCR error " + it.message) }
-            .addOnCompleteListener { b.recycle(); busy = false }
+            .addOnFailureListener {
+                log("OCR error " + it.message)
+                b.recycle()
+                busy = false
+            }
+    }
+
+    private fun handleFrame(
+        result: com.google.mlkit.vision.text.Text,
+        b: Bitmap,
+        hud: String
+    ) {
+        if (!running || !inGame()) return
+        val whole = result.text.uppercase(Locale.ROOT).replace('\n', ' ')
+            .replace(Regex("\\s+"), " ")
+        val lines = result.textBlocks.flatMap { it.lines }.mapNotNull { line ->
+            line.boundingBox?.let { Pair(line.text.uppercase(Locale.ROOT), it) }
+        }
+        fun has(t: String) = whole.contains(t)
+        val now = System.currentTimeMillis()
+
+        // Prefer the isolated HUD. Never use text from the card collection
+        // as a source of ROUND number.
+        val hudRound = roundNumber(hud)
+        val rawRound = hudRound ?: roundNumber(whole)
+        val previous = tracker.current
+        val stableRound = tracker.observe(rawRound, now)
+        if (rawRound != null && stableRound != rawRound &&
+            now - lastRejectedRoundLogAt > 7000L) {
+            log("OCR rundy odrzucone: raw=" + rawRound +
+                " stabilna=" + (stableRound ?: "?") +
+                " HUD=[" + hud.take(45) + "]")
+            lastRejectedRoundLogAt = now
+        }
+        if (stableRound != null && stableRound != previous) {
+            log("RUNDA ZATWIERDZONA " + stableRound +
+                " (HUD=" + hud.take(45) + ")")
+        }
+        val direct = when {
+            (has("BATTLE") && has("SUCCESSFUL")) || has("VICTORY") ||
+                has("DEFEAT") || (has("BATTLE") && has("FAILED")) -> Screen.RESULT
+            has("TAP TO CONTINUE") -> Screen.REWARD
+            has("ROUND") || hud.contains("ROUND") ||
+                (has("POWER") && has("ANGLE")) -> Screen.MATCH
+            (has("ARENA") || has("FORGE") || has("RANKING")) &&
+                (has("BATTLE") || isYellowBattle(b)) -> Screen.HOME
+            else -> Screen.UNKNOWN
+        }
+        if (direct == Screen.MATCH) lastMatchSeenAt = now
+        val current = if (direct == Screen.UNKNOWN &&
+            phase == Screen.MATCH &&
+            now - lastMatchSeenAt < 22000L) Screen.MATCH else direct
+
+        if (current == Screen.MATCH && now - lastMatchDebugAt >= 10000L) {
+            log("MATCH OCR: raw=" + (rawRound ?: "?") +
+                " stabilna=" + (stableRound ?: "?") +
+                " HUD=[" + hud.take(55) + "] " + whole.take(70))
+            lastMatchDebugAt = now
+        }
+
+        if (current != phase) {
+            phase = current
+            phaseFrames = 1
+            phaseClicks = 0
+            if (phase == Screen.HOME || phase == Screen.RESULT || phase == Screen.REWARD) {
+                lastShotRound = -1
+                lastCardRound = -1
+                tracker.reset()
+            }
+            log("Ekran " + current + " (OCR=" + whole.take(70) + ")")
+        } else phaseFrames++
+        if (phaseFrames < 2) return
+        if (current == Screen.MATCH) {
+            if (prefs.getBoolean("autoFightV03", true)) autoBattleTurn(
+                stableRound, whole, b, now)
+            return
+        }
+        if (current == Screen.UNKNOWN || phaseClicks >= 3) return
+        val delay = if (current == Screen.HOME) 6500 else 3200
+        if (now - lastClick < delay) return
+        fun findClick(word: String, xmin: Float, ymin: Float): Pair<Float, Float>? =
+            lines.firstOrNull {
+                it.first.contains(word) &&
+                    it.second.centerX() > b.width * xmin &&
+                    it.second.centerY() > b.height * ymin
+            }?.second?.let {
+                Pair(it.centerX() / b.width.toFloat(), it.centerY() / b.height.toFloat())
+            }
+        val point = when (current) {
+            Screen.HOME -> findClick("BATTLE", .65f, .69f) ?: Pair(.89f, .89f)
+            Screen.RESULT -> findClick("CONTINUE", .56f, .68f) ?: Pair(.75f, .91f)
+            Screen.REWARD -> findClick("CONTINUE", .25f, .68f) ?: Pair(.50f, .89f)
+            else -> null
+        }
+        if (point != null && gesture(point.first, point.second,
+                point.first, point.second, b.width, b.height, 90)) {
+            phaseClicks++
+            lastClick = now
+            log("Tap " + current + " #" + phaseClicks)
+        }
     }
     private fun isYellowBattle(b: Bitmap): Boolean {
         var hits = 0
@@ -249,57 +312,71 @@ class CastleService : AccessibilityService() {
             .find(text)?.groupValues?.getOrNull(1)?.toIntOrNull()
     }
 
-    private fun autoBattleTurn(text: String, bmp: Bitmap, now: Long) {
-        // Use a recently confirmed round, rather than demanding perfect OCR
-        // in two consecutive scans of the animated HUD.
-        val observedRound = roundNumber(text)
-        val round = observedRound ?: cachedRound.takeIf {
-            it in 1..24 && now-cachedRoundAt<30000L
-        }
+    private fun autoBattleTurn(
+        round: Int?,
+        text: String,
+        bmp: Bitmap,
+        now: Long
+    ) {
         if (round == null) {
-            if (now-lastBattleLogAt>12000) {
-                log("WALKA: brak numeru rundy; OCR=" + text.take(115))
+            if (now-lastBattleLogAt>11000L) {
+                log("WALKA: czekam na dwa zgodne odczyty rundy, OCR=" + text.take(60))
                 lastBattleLogAt=now
             }
             return
         }
-        if (round !in 1..24 || round == lastShotRound) return
-        if (now-lastShotAt<5500 || now-lastCardTapAt<2400) return
+        if (round !in 1..24) return
+        if (round == lastShotRound) {
+            if (lastShotReviewRound != round && now-lastShotAt>2800L) {
+                log("KONTROLA rundy " + round +
+                    ": Android wykonał gest, ale trafienie nadal niepotwierdzone; POWER=" +
+                    (text.contains("POWER")) + " ANGLE=" + text.contains("ANGLE"))
+                lastShotReviewRound = round
+            }
+            return
+        }
+        if (now-lastShotAt < 5500L || now-lastCardTapAt<2400L) return
 
-        val hero = BattleVision.findSelectedUnit(bmp)
-        if (hero == null) {
-            if (lastCardRound != round && now-lastCardTapAt>4200) {
-                if (gesture(.528f,.889f,.528f,.889f,bmp.width,bmp.height,75)) {
-                    lastCardRound=round
-                    lastCardTapAt=now
-                    log("WYBÓR rundy " + round +
-                        ": dotknięto karty (dispatch), czekam na białą strzałkę")
+        val marker = BattleVision.detectSelectedUnit(bmp)
+        if (marker == null) {
+            if (lastCardRound != round && now-lastCardTapAt>4200L) {
+                if (gesture(.528f,.889f,.528f,.889f,bmp.width,bmp.height,75,
+                        "karta_runda_"+round)) {
+                    lastCardRound = round
+                    lastCardTapAt = now
+                    log("WYBÓR rundy " + round + ": próba wyboru karty")
                 }
-            } else if (now-lastBattleLogAt>12000) {
-                log("CEL rundy " + round + ": nie wykryto białej strzałki na ekranie")
-                lastBattleLogAt=now
+            } else if (now-lastBattleLogAt>9000L) {
+                log("CEL rundy " + round + ": brak pewnej białej strzałki; nie strzelam")
+                lastBattleLogAt = now
             }
             return
         }
 
-        // Basic launch profiles; not yet trajectory prediction.
-        val profiles = arrayOf(
+        // Still a heuristic shot. Marker must pass shape and position checks.
+        val offsets = arrayOf(
             floatArrayOf(.22f,-.105f), floatArrayOf(.27f,-.085f),
             floatArrayOf(.19f,-.135f), floatArrayOf(.24f,-.060f)
         )
-        val p=profiles[(round-1)%profiles.size]
-        val sx=hero.first.coerceIn(.13f,.72f)
-        val sy=hero.second.coerceIn(.17f,.84f)
-        val ex=(sx+p[0]).coerceIn(.04f,.94f)
-        val ey=(sy+p[1]).coerceIn(.08f,.86f)
+        val p = offsets[(round-1)%offsets.size]
+        val sx = marker.x.coerceIn(.13f,.72f)
+        val sy = marker.y.coerceIn(.17f,.84f)
+        val ex = (sx+p[0]).coerceIn(.04f,.94f)
+        val ey = (sy+p[1]).coerceIn(.08f,.86f)
+        val coordinates = String.format(Locale.ROOT,
+            "%.3f,%.3f->%.3f,%.3f",sx,sy,ex,ey)
+        log("CEL rundy " + round + ": strzałka=" +
+            String.format(Locale.ROOT,"%.3f,%.3f",marker.x,marker.y) +
+            " pewność=" + marker.confidence +
+            " gest=" + coordinates)
+
         if (gesture(sx,sy,ex,ey,bmp.width,bmp.height,850,"strzal_runda_"+round)) {
-            lastShotRound=round
-            lastShotAt=now
-            val coords=String.format(Locale.ROOT,"%.3f,%.3f -> %.3f,%.3f",sx,sy,ex,ey)
-            log("Runda " + round + ": AUTO gesture " + coords +
-                " (przyjęty przez dispatch; oczekuję zakończenia)")
+            lastShotRound = round
+            lastShotAt = now
+            log("Runda " + round + ": AUTO gesture " + coordinates +
+                " (przekazany Androidowi, niepotwierdzony w grze)")
         } else {
-            log("Runda " + round + ": gest nie został wysłany")
+            log("Runda " + round + ": gest ODRZUCONY")
         }
     }
 

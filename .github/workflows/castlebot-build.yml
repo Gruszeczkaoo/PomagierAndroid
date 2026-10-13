@@ -27,10 +27,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
-      - run: gradle --no-daemon :app:assembleDebug
+      - run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: CastleBot_by_Don_v0.3.1_debug_APK
+          name: CastleBot_by_Don_v0.3.2_debug_APK
           path: CastleBot/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 30

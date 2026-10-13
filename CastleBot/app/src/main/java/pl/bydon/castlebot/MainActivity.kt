@@ -36,8 +36,8 @@ class MainActivity : Activity() {
                 setOnClickListener { action() }
             })
         }
-        label("CastleBot by Don v0.3.1", 24f)
-        label("Poprawione wykrywanie rund i celowania. Bot zapamiętuje rundę mimo chwilowego błędu OCR.")
+        label("CastleBot by Don v0.3.2", 24f)
+        label("Stabilizacja OCR: odrzucanie podejrzanych przeskoków rund i ostrożniejsze wykrywanie jednostki.")
         button("1. Włącz usługę dostępności") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
