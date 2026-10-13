@@ -36,8 +36,8 @@ class MainActivity : Activity() {
                 setOnClickListener { action() }
             })
         }
-        label("CastleBot by Don v0.3.0", 24f)
-        label("Auto-walka: rozpoznaj postać, wykonaj próbę strzału, odbierz nagrodę i rozpocznij kolejną bitwę.")
+        label("CastleBot by Don v0.3.1", 24f)
+        label("Poprawione wykrywanie rund i celowania. Bot zapamiętuje rundę mimo chwilowego błędu OCR.")
         button("1. Włącz usługę dostępności") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }

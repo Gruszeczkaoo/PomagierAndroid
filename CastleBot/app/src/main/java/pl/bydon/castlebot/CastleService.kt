@@ -52,6 +52,10 @@ class CastleService : AccessibilityService() {
     private var lastClick = 0L
     private var lastShotRound = -1
     private var lastShotAt = 0L
+    private var lastMatchSeenAt = 0L
+    private var cachedRound = -1
+    private var cachedRoundAt = 0L
+    private var lastMatchDebugAt = 0L
     private val tick = object : Runnable {
         override fun run() {
             if (running && !busy && calibration == null && inGame()) screenshot()
@@ -89,6 +93,10 @@ class CastleService : AccessibilityService() {
         lastShotRound = -1
         lastCardRound = -1
         lastCardTapAt = 0L
+        cachedRound = -1
+        cachedRoundAt = 0L
+        lastMatchSeenAt = 0L
+        lastMatchDebugAt = 0L
         setPanelState()
         log("START")
         toast("CastleBot START")
@@ -146,27 +154,48 @@ class CastleService : AccessibilityService() {
                     line.boundingBox?.let { Pair(line.text.uppercase(Locale.ROOT), it) }
                 }
                 fun has(t: String) = whole.contains(t)
-                val current = when {
+                val now = System.currentTimeMillis()
+                val roundRead = roundNumber(whole)
+                // OCR can lose the ROUND HUD for 1-3 consecutive frames.
+                // Cache the detected round BEFORE waiting for stable-frame confirmation.
+                if (roundRead != null && roundRead in 1..24) {
+                    cachedRound = roundRead
+                    cachedRoundAt = now
+                }
+                val direct = when {
                     (has("BATTLE") && has("SUCCESSFUL")) || has("VICTORY") ||
                         has("DEFEAT") || (has("BATTLE") && has("FAILED")) -> Screen.RESULT
                     has("TAP TO CONTINUE") -> Screen.REWARD
-                    has("ROUND") && (has("POWER") || has("ANGLE") || Regex("\\b[0-9]{1,2}\\s*/\\s*24\\b").containsMatchIn(whole)) -> Screen.MATCH
+                    (has("ROUND") || (roundRead != null && has("VS")) ||
+                        (has("POWER") && has("ANGLE"))) -> Screen.MATCH
                     (has("ARENA") || has("FORGE") || has("RANKING")) &&
                         (has("BATTLE") || isYellowBattle(b)) -> Screen.HOME
                     else -> Screen.UNKNOWN
+                }
+                if (direct == Screen.MATCH) lastMatchSeenAt = now
+                // Do not turn MATCH -> UNKNOWN on a single bad screenshot.
+                // Strong HOME/RESULT/REWARD evidence still exits immediately.
+                val current = if (direct == Screen.UNKNOWN &&
+                    phase == Screen.MATCH &&
+                    now - lastMatchSeenAt < 30000L) Screen.MATCH else direct
+                if (current == Screen.MATCH && now-lastMatchDebugAt >= 10000L) {
+                    log("MATCH OCR: round=" + (roundRead?.toString() ?: "?") +
+                        " cached=" + cachedRound + " text=" + whole.take(100))
+                    lastMatchDebugAt=now
                 }
                 if (current != phase) {
                     phase = current
                     phaseFrames = 1
                     phaseClicks = 0
-                    if (phase == Screen.HOME || phase == Screen.RESULT) {
+                    if (phase == Screen.HOME || phase == Screen.RESULT || phase == Screen.REWARD) {
                         lastShotRound = -1
                         lastCardRound = -1
+                        cachedRound = -1
+                        cachedRoundAt = 0L
                     }
-                    log("Ekran " + current)
+                    log("Ekran " + current + " (OCR=" + whole.take(90) + ")")
                 } else phaseFrames++
                 if (phaseFrames < 2) return@addOnSuccessListener
-                val now = System.currentTimeMillis()
                 if (current == Screen.MATCH) {
                     if (prefs.getBoolean("autoFightV03", true)) autoBattleTurn(whole, b, now)
                     return@addOnSuccessListener
@@ -221,10 +250,15 @@ class CastleService : AccessibilityService() {
     }
 
     private fun autoBattleTurn(text: String, bmp: Bitmap, now: Long) {
-        val round = roundNumber(text)
+        // Use a recently confirmed round, rather than demanding perfect OCR
+        // in two consecutive scans of the animated HUD.
+        val observedRound = roundNumber(text)
+        val round = observedRound ?: cachedRound.takeIf {
+            it in 1..24 && now-cachedRoundAt<30000L
+        }
         if (round == null) {
             if (now-lastBattleLogAt>12000) {
-                log("WALKA: nie mogę odczytać numeru rundy")
+                log("WALKA: brak numeru rundy; OCR=" + text.take(115))
                 lastBattleLogAt=now
             }
             return
@@ -238,10 +272,11 @@ class CastleService : AccessibilityService() {
                 if (gesture(.528f,.889f,.528f,.889f,bmp.width,bmp.height,75)) {
                     lastCardRound=round
                     lastCardTapAt=now
-                    log("Runda " + round + ": wybieram kartę; czekam na znacznik jednostki")
+                    log("WYBÓR rundy " + round +
+                        ": dotknięto karty (dispatch), czekam na białą strzałkę")
                 }
             } else if (now-lastBattleLogAt>12000) {
-                log("Runda " + round + ": brak białego znacznika jednostki")
+                log("CEL rundy " + round + ": nie wykryto białej strzałki na ekranie")
                 lastBattleLogAt=now
             }
             return
@@ -257,24 +292,35 @@ class CastleService : AccessibilityService() {
         val sy=hero.second.coerceIn(.17f,.84f)
         val ex=(sx+p[0]).coerceIn(.04f,.94f)
         val ey=(sy+p[1]).coerceIn(.08f,.86f)
-        if (gesture(sx,sy,ex,ey,bmp.width,bmp.height,850)) {
+        if (gesture(sx,sy,ex,ey,bmp.width,bmp.height,850,"strzal_runda_"+round)) {
             lastShotRound=round
             lastShotAt=now
             val coords=String.format(Locale.ROOT,"%.3f,%.3f -> %.3f,%.3f",sx,sy,ex,ey)
             log("Runda " + round + ": AUTO gesture " + coords +
-                " (wysłany; trafienie niepotwierdzone)")
+                " (przyjęty przez dispatch; oczekuję zakończenia)")
         } else {
             log("Runda " + round + ": gest nie został wysłany")
         }
     }
 
-    private fun gesture(sx:Float,sy:Float,ex:Float,ey:Float,w:Int,h:Int,ms:Long): Boolean {
+    private fun gesture(sx:Float,sy:Float,ex:Float,ey:Float,w:Int,h:Int,ms:Long,
+                        tag:String = "dotkniecie"): Boolean {
         if (!running || !inGame()) return false
         val path = Path()
         path.moveTo(sx.coerceIn(0f,1f)*w,sy.coerceIn(0f,1f)*h)
         path.lineTo(ex.coerceIn(0f,1f)*w,ey.coerceIn(0f,1f)*h)
         return dispatchGesture(GestureDescription.Builder()
-            .addStroke(GestureDescription.StrokeDescription(path,0,ms)).build(),null,null)
+            .addStroke(GestureDescription.StrokeDescription(path,0,ms)).build(),
+            object : GestureResultCallback() {
+                override fun onCompleted(gestureDescription: GestureDescription) {
+                    if (tag.startsWith("strzal")) log("GEST Android ZAKOŃCZONY: " + tag)
+                }
+                override fun onCancelled(gestureDescription: GestureDescription) {
+                    log("GEST Android ANULOWANY: " + tag)
+                    // A cancelled gesture must not count as a completed round.
+                    if (tag.startsWith("strzal")) lastShotRound = -1
+                }
+            }, handler)
     }
     // All dimensions are dp, not raw pixels. Normal Android Buttons have large
     // minimum widths and were clipped in landscape when given 110 px.

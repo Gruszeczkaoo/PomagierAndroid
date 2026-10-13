@@ -76,7 +76,7 @@ object BattleVision {
             if(score>best) {
                 best=score
                 bestPoint=Pair(cx/w.toFloat(),
-                    ((top+maxY*step+h*.035f)/h).coerceIn(0f,1f))
+                    ((top+maxY*step+h*.075f)/h).coerceIn(0f,1f))
             }
         }
         return if(best>73)bestPoint else null

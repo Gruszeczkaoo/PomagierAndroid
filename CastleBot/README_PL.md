@@ -1,27 +1,25 @@
-# CastleBot by Don v0.3.0
+# CastleBot by Don v0.3.1 — poprawka z logów
+Wykryty błąd: MATCH -> UNKNOWN po około 2 sekundach, bez próby AUTO gesture.
 
-Testowa automatyzacja rozgrywki Castle Busters na Androidzie 11+.
-## Nowe funkcje
-- Walka rozpoznawana również na ekranie ROUND 5/24 bez POWER/ANGLE.
-- Wykrywanie białego znacznika aktywnej własnej jednostki analizą pikseli.
-- Gdy znacznik jest niewidoczny, jednorazowy wybór karty i ponowna próba.
-- Automatyczna próba gestu strzału z wybranej postaci w stronę przeciwnika maksymalnie raz na rundę.
-- Sekwencja menu / wynik / nagrody / następny mecz zachowana.
-- Tryb AUTO jest włączony domyślnie w v0.3; można go wyłączyć w głównej aplikacji.
-- Diagnostyka zapisuje próby "AUTO gesture" oraz przypadki braku rozpoznanej jednostki.
+## Zmiany
+- ROUND HUD nie musi być prawidłowo odczytany w dwóch kolejnych screenshotach.
+- Zapis ostatniego rozpoznanego numeru rundy na 30 sekund.
+- Stan MATCH pozostaje aktywny przez krótki czas przy błędnym OCR (do 30 sekund), jeśli nie pojawi się rozpoznany HOME/RESULT/REWARD.
+- Doprecyzowanie wykrywania aktywnej jednostki: gest rozpoczyna się niżej, na postaci, zamiast na białej strzałce.
+- Dodatkowe wpisy OCR, WYBÓR, CEL, AUTO gesture i GEST Android ZAKOŃCZONY / ANULOWANY.
+- Zachowana zasada maksymalnie jednej próby strzału na numer rundy i przycisk STOP.
 
-## Instalacja
+## Test
 1. Otwórz https://github.com/Gruszeczkaoo/PomagierAndroid/actions/workflows/castlebot-build.yml
-2. Wybierz zielone uruchomienie z gałęzi castlebot-v0.2.
-3. Pobierz ZIP "CastleBot_by_Don_v0.3.0_debug_APK" z sekcji Artifacts.
-4. Wypakuj app-debug.apk, zainstaluj, włącz usługę dostępności CastleBot.
-5. Uruchom grę przyciskiem "Uruchom grę i START".
-6. Przetestuj kilka tur i prześlij dziennik działania, jeśli nie odda strzału.
+2. Pobierz APK z ostatniego zielonego buildu CastleBot_by_Don_v0.3.1_debug_APK.
+3. Zainstaluj i włącz usługę dostępności, a następnie uruchom grę i START.
+4. Po jednej lub dwóch rundach otwórz CastleBot > Wyświetl dziennik działania.
+5. Wklej log (najlepiej z momentów MATCH OCR, WYBÓR, CEL, AUTO gesture, GEST).
+6. Jeżeli nadal brak strzału, potrzebne będzie krótkie wideo ręcznego celowania i puszczenia palca. Bez niego nie można potwierdzić, że kierunek gestu odpowiada mechanice Castle Busters.
 
 ## Ograniczenia
-- To wersja testowa, nie gotowy silnik AI; gest jest orientacyjny, nie szacuje trajektorii.
-- Wysłanie gestu nie dowodzi wystrzału ani trafienia. Potrzebne testy na telefonie.
-- Detektor został opracowany z przesłanego kadru 1536x695 i nie musi działać w każdej rundzie.
-- Nie klika reklam, zakupów ani Double rewards.
-- Automatyzacja PvP może naruszać zasady gry.
-- APK z GitHub Actions ma podpis DEBUG. Jeśli telefon zgłosi konflikt podpisu, odinstaluj starą aplikację CastleBot (nie Castle Busters), zainstaluj nową i włącz usługę dostępu.
+- Przyjęcie gestu przez system Android nie oznacza, że gra oddała strzał.
+- Wykrywanie białej strzałki i trajektoria są heurystykami, a nie wytrenowanym modelem trafień.
+- Automatyczne granie w PvP może naruszać regulamin.
+- Bot nie klika reklam ani zakupów.
+- Pakiet źródłowy zostaje w gałęzi castlebot-v0.2, nie zmienia Pomagiera main.
