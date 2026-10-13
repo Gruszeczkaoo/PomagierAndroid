@@ -40,6 +40,10 @@ class CastleService : AccessibilityService() {
     private var busy = false
     private var gameForeground = false
     private var overlay: View? = null
+    private var panelParams: WindowManager.LayoutParams? = null
+    private var panelHeader: android.widget.TextView? = null
+    private var panelActions: LinearLayout? = null
+    private var panelExpanded = false
     private var calibration: View? = null
     private var firstPoint: Pair<Float, Float>? = null
     private var phase = Screen.UNKNOWN
@@ -83,11 +87,13 @@ class CastleService : AccessibilityService() {
         phaseFrames = 0
         phaseClicks = 0
         lastShotRound = -1
+        setPanelState()
         log("START")
         toast("CastleBot START")
     }
     fun stopBot() {
         running = false
+        setPanelState()
         log("STOP")
         toast("CastleBot STOP")
     }
@@ -215,29 +221,154 @@ class CastleService : AccessibilityService() {
         return dispatchGesture(GestureDescription.Builder()
             .addStroke(GestureDescription.StrokeDescription(path,0,ms)).build(),null,null)
     }
-    private fun controls() {
-        val bar = LinearLayout(this).apply {
-            setPadding(2,2,2,2)
-            setBackgroundColor(0xCC16354F.toInt())
-        }
-        fun add(name: String, click: () -> Unit) {
-            bar.addView(Button(this).apply {
-                text = name; textSize = 11f
-                setOnClickListener { click() }
-            }, LinearLayout.LayoutParams(110,90))
-        }
-        add("START") { startBot() }
-        add("STOP") { stopBot() }
-        add("KAL") { calibrate() }
-        add("TEST") { testShot() }
-        val p = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
-        ).apply { gravity=Gravity.TOP or Gravity.START; x=2; y=70 }
-        try { wm.addView(bar,p); overlay=bar } catch (e: Exception) { log("Overlay " + e.message) }
+    // All dimensions are dp, not raw pixels. Normal Android Buttons have large
+    // minimum widths and were clipped in landscape when given 110 px.
+    private fun dp(v: Float): Int = (v * resources.displayMetrics.density + .5f).toInt()
+
+    private fun setPanelState() {
+        panelHeader?.text = if (running) "DON ●" else "DON ○"
     }
+
+    private fun controls() {
+        if (overlay != null) return
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(4f), dp(4f), dp(4f), dp(4f))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0xDA142538.toInt())
+                cornerRadius = dp(11f).toFloat()
+            }
+        }
+
+        fun chip(label: String, widthDp: Float, backgroundColor: Int, action: () -> Unit): android.widget.TextView {
+            val item = android.widget.TextView(this).apply {
+                text = label
+                textSize = 12f
+                setTextColor(Color.WHITE)
+                gravity = Gravity.CENTER
+                contentDescription = label
+                isClickable = true
+                isFocusable = true
+                background = android.graphics.drawable.GradientDrawable().apply {
+                    setColor(backgroundColor)
+                    cornerRadius = dp(8f).toFloat()
+                }
+                setOnClickListener { action() }
+            }
+            item.layoutParams = LinearLayout.LayoutParams(dp(widthDp), dp(38f)).apply {
+                setMargins(dp(2f), 0, dp(2f), 0)
+            }
+            return item
+        }
+
+        val headerRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        root.addView(headerRow)
+        val header = chip("DON ○", 84f, 0xFF225B80.toInt()) { togglePanel() }
+        panelHeader = header
+        headerRow.addView(header)
+
+        // Emergency STOP is visible even when the rest of the panel is folded.
+        headerRow.addView(chip("STOP", 64f, 0xFFC33B3B.toInt()) { stopBot() })
+
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            visibility = View.GONE
+            setPadding(0, dp(4f), 0, 0)
+        }
+        actions.addView(chip("START", 64f, 0xFF24764B.toInt()) { startBot() })
+        actions.addView(chip("KAL", 64f, 0xFF365F9D.toInt()) {
+            togglePanel(false)
+            calibrate()
+        })
+        actions.addView(chip("TEST", 64f, 0xFF365F9D.toInt()) {
+            togglePanel(false)
+            testShot()
+        })
+        root.addView(actions)
+        panelActions = actions
+
+        // Drag only on DON. A short tap on DON expands/collapses controls.
+        header.setOnTouchListener(object : View.OnTouchListener {
+            var downX = 0f
+            var downY = 0f
+            var originX = 0
+            var originY = 0
+            var moved = false
+
+            override fun onTouch(v: View, event: MotionEvent): Boolean {
+                val p = panelParams ?: return false
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        downX = event.rawX
+                        downY = event.rawY
+                        originX = p.x
+                        originY = p.y
+                        moved = false
+                        return true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val dx = event.rawX - downX
+                        val dy = event.rawY - downY
+                        if (kotlin.math.abs(dx) > dp(7f) || kotlin.math.abs(dy) > dp(7f)) {
+                            moved = true
+                        }
+                        if (moved) {
+                            val bounds = wm.currentWindowMetrics.bounds
+                            p.x = (originX + dx.toInt()).coerceIn(
+                                0, (bounds.width() - root.width).coerceAtLeast(0))
+                            p.y = (originY + dy.toInt()).coerceIn(
+                                0, (bounds.height() - root.height).coerceAtLeast(0))
+                            try { wm.updateViewLayout(root, p) }
+                            catch (e: Exception) { log("Drag: " + e.message) }
+                        }
+                        return true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        if (!moved) v.performClick()
+                        else {
+                            prefs.edit().putInt("panelX",p.x).putInt("panelY",p.y).apply()
+                        }
+                        return true
+                    }
+                    MotionEvent.ACTION_CANCEL -> return true
+                }
+                return false
+            }
+        })
+
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            x = prefs.getInt("panelX", dp(12f))
+            y = prefs.getInt("panelY", dp(96f))
+        }
+
+        try {
+            wm.addView(root, params)
+            overlay = root
+            panelParams = params
+            setPanelState()
+        } catch (e: Exception) { log("Overlay: " + e.message) }
+    }
+
+    private fun togglePanel(force: Boolean? = null) {
+        panelExpanded = force ?: !panelExpanded
+        panelActions?.visibility = if (panelExpanded) View.VISIBLE else View.GONE
+        overlay?.let { view ->
+            panelParams?.let { p ->
+                try { wm.updateViewLayout(view, p) }
+                catch (e: Exception) { log("Panel: " + e.message) }
+            }
+        }
+    }
+
     private fun calibrate() {
         if (calibration != null) return
         firstPoint = null

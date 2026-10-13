@@ -1,4 +1,4 @@
-# CastleBot by Don v0.2
+# CastleBot by Don v0.2.1
 Wersja rozwojowa Android 11+ (bez roota). Zastosowano AccessibilityService.takeScreenshot + ML Kit OCR oraz dispatchGesture. Pakiet oryginalnej gry: com.epicoro.castleclashers.
 
 ## Automatyka
@@ -13,7 +13,7 @@ Wersja rozwojowa Android 11+ (bez roota). Zastosowano AccessibilityService.takeS
 ## Pobieranie APK
 1. https://github.com/Gruszeczkaoo/PomagierAndroid/actions/workflows/castlebot-build.yml
 2. Otwórz zielone uruchomienie dla gałęzi castlebot-v0.2.
-3. W sekcji Artifacts pobierz CastleBot_by_Don_v0.2_debug_APK (ZIP).
+3. W sekcji Artifacts pobierz CastleBot_by_Don_v0.2.1_debug_APK (ZIP).
 4. Rozpakuj ZIP na telefonie i zainstaluj plik app-debug.apk.
 5. Włącz usługę CastleBot w Android -> Ułatwienia dostępu, uruchom CastleBot, naciśnij START.
 
@@ -26,3 +26,12 @@ Jeżeli build jest czerwony albo nie ma artefaktu, APK nie zostało zbudowane. P
 - Nie klikamy reklam i zakupów.
 - Automatyzacja PvP może naruszać regulamin gry.
 - APK z workflow jest wersją DEBUG i może wymagać odinstalowania wcześniejszego APK podpisanego innym kluczem.
+
+## Panel v0.2.1
+- Wersja 0.2 miała cztery standardowe przyciski Androida z szerokością 110 pikseli; na telefonach o dużym DPI napisy były ucięte.
+- Nowy zwijany panel używa wymiarów dp i zwykłych kontrolek tekstowych bez minimalnych wymiarów systemowych.
+- Dotknij DON, aby rozwinąć START / KAL / TEST, a STOP jest stale widoczny.
+- Przytrzymaj i przesuń DON, aby przeciągnąć panel; pozycja jest zapisywana.
+- Panel domyślnie jest zwinięty i pojawia się niżej, aby nie zasłaniać paska zdrowia.
+- v0.2.1 to naprawa panelu; nadal brak inteligentnego celowania.
+- Debugowe podpisy APK budowane w GitHub Actions mogą się różnić. Jeśli Android odrzuca aktualizację, odinstaluj starą aplikację i dopiero zainstaluj nową; utracisz ustawienia i trzeba ponownie włączyć dostępność.

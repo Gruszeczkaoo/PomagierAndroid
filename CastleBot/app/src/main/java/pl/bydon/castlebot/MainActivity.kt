@@ -36,7 +36,7 @@ class MainActivity : Activity() {
                 setOnClickListener { action() }
             })
         }
-        label("CastleBot by Don v0.2", 24f)
+        label("CastleBot by Don v0.2.1", 24f)
         label("Menu → Battle → wynik → Continue → nagrody → kolejny Battle.")
         button("1. Włącz usługę dostępności") {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
@@ -72,7 +72,7 @@ class MainActivity : Activity() {
             }
             startActivity(Intent.createChooser(share, "Diagnostyka CastleBot"))
         }
-        label("Podczas gry nakładka START / STOP / KAL / TEST pozwala zarządzać botem. " +
+        label("Podczas gry mały panel DON / STOP można przeciągać po ekranie. Dotknij DON, aby rozwinąć START / KAL / TEST. " +
             "KAL zapisuje gest pomiędzy dwoma wskazanymi dotknięciami. " +
             "TEST wykonuje go jeden raz. Nie włączaj auto-strzałów przed testem.")
         label("Wersja testowa: nie ma jeszcze inteligentnego celowania. " +
