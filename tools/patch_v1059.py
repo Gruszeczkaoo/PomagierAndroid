@@ -113,10 +113,10 @@ if s.count(evidence_anchor)!=1:raise SystemExit('Brak totalPoints do guardu')
 s=s.replace(evidence_anchor,evidence_guard+evidence_anchor,1)
 old="""        best:ranked[0]||null,top:ranked,"""
 new="""        best:ranked[0]||null,top:ranked,
-        alternatives:[{minStrength:30,minEndurance:20},{minStrength:40,minEndurance:20}].map(limit=>{
+        alternatives:[{name:'ATAK / STR 40+',minStrength:40,minEndurance:0},{name:'BALANS / STR 30+ END 20+',minStrength:30,minEndurance:20}].map(limit=>{
           const {minStrength,minEndurance}=limit;
           const x=refined.find(c=>c.attrs.str>=minStrength && c.attrs.end>=minEndurance);
-          return x?{minStrength,minEndurance,build:pvpLabBuildCode(x.attrs,x.plan),score:x.score,
+          return x?{name:limit.name,minStrength,minEndurance,build:pvpLabBuildCode(x.attrs,x.plan),score:x.score,
             combat:{attack:Math.round(x.stats.attack),defense:Math.round(x.stats.defense),maxHp:Math.round(x.stats.maxHp)}}:null;
         }).filter(Boolean),"""
 if s.count(old)!=1:raise SystemExit('Brak best top')
@@ -134,7 +134,7 @@ s=s.replace(old,new,1)
 old="""<div class="sub">CEL: REALNE PvP 1:1"""
 new="""<div class="note"><b>MODEL v3 • pewność ${esc(opt.modelConfidence||'NISKA')}.</b> ${esc(opt.modelWarning||'')}
          <div class="sub">Ranking to estymacja — nie udowodniony procent wygranych. Aktualny build: ${Number(opt.current?.realFightN||0)} rozegranych walk. Nie resetuj punktow bez sprawdzenia w realnym PvP.</div>
-         <div class="sub"><b>Alternatywy z Siłą:</b> ${(opt.alternatives||[]).map(a=>`STR ${Number(a.minStrength)}+ / END ${Number(a.minEndurance)}+ • ${esc(a.build)} • wynik ${Number(a.score||0).toFixed(1)}/100 • ATK ${a.combat.attack} / DEF ${a.combat.defense} / HP ${a.combat.maxHp}`).join('<div></div>')||'brak'}</div></div>
+         <div class="sub"><b>Alternatywy z Siłą:</b> ${(opt.alternatives||[]).map(a=>`${esc(a.name||'Sila')} • ${esc(a.build)} • wynik ${Number(a.score||0).toFixed(1)}/100 • ATK ${a.combat.attack} / DEF ${a.combat.defense} / HP ${a.combat.maxHp}`).join('<div></div>')||'brak'}</div></div>
          <div class="sub">CEL: REALNE PvP 1:1"""
 if s.count(old)!=1:raise SystemExit('Brak UI evidence anchor')
 s=s.replace(old,new,1)
