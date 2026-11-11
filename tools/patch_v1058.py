@@ -23,9 +23,9 @@ note = """  // v8.8.65 PVP JSON EXPORT FIX:
   // - skaner nadal jest read-only i zachowuje dotychczasowy format JSON,
   // - brak odtworzenia rejestratora Wysypiska ani jego localStorage.
 """
-anchor = "  // v8.8.64 RAID EXECUTE ENDPOINT FIX:"
+anchor = "  const VERSION = '8.8.65';"
 if anchor not in s:
-    raise SystemExit("Brak kotwicy poprzedniej wersji")
+    raise SystemExit("Brak identyfikatora wersji przed poprawka eksportu")
 s = s.replace(anchor, note + anchor, 1)
 
 marker = "  async function pvpEngineScanExport(){"
