@@ -130,7 +130,7 @@
     leagueLabAccountGuard();
     if(leagueLab.matches.length>1000) leagueLab.matches=leagueLab.matches.slice(-1000);
     if(leagueLab.errors.length>20) leagueLab.errors=leagueLab.errors.slice(-20);
-    const e=Object.entries(leagueLab.endpoints).sort((a,b)=>Number(b[1]?.lastAt||0)-Number(a[1]?.lastAt||0)).slice(0,35);
+    const e=Object.entries(leagueLab.endpoints).sort((a,b)=>Number(b[1]?.lastAt||0)-Number(a[1]?.lastAt||0)).slice(0,25);
     leagueLab.endpoints=Object.fromEntries(e);
     const busy=!!leagueLab.syncing; leagueLab.syncing=false;
     try{saveJSON(LEAGUE_LAB_KEY,leagueLab);}finally{leagueLab.syncing=busy;}
@@ -149,7 +149,7 @@
     const prev=leagueLab.endpoints[key]||{};
     const clean=leagueLabSanitize(data);
     const raw=JSON.stringify(clean);
-    const matchRows=leagueLabNormalizeMatches(clean,path);
+    const matchRows=leagueLabNormalizeMatches(data,path);
     for(const m of matchRows){
       const index=leagueLab.matches.findIndex(x=>x.key===m.key);
       if(index>=0) leagueLab.matches[index]={...leagueLab.matches[index],...m};
@@ -158,9 +158,9 @@
     leagueLab.endpoints[key]={method,path,firstAt:Number(prev.firstAt||Date.now()),lastAt:Date.now(),
       count:Number(prev.count||0)+1,source:String(meta.source||'native'),
       keys:Object.keys(clean&&typeof clean==='object'?clean:{}).slice(0,70),
-      bytes:raw.length,truncated:raw.length>95000,
+      bytes:raw.length,truncated:raw.length>20000,
       // Bez danych uwierzytelniajacych. Zachowuj skrocony payload dla poznania prawdziwego schematu API.
-      sample:raw.length>95000?{truncated:true,bytes:raw.length,keys:Object.keys(clean||{}).slice(0,70)}:clean};
+      sample:raw.length>20000?{truncated:true,bytes:raw.length,keys:Object.keys(clean||{}).slice(0,70)}:clean};
     leagueLab.lastCaptureAt=Date.now();
     leagueLab.status='ZEBRANO • '+leagueLab.matches.length+' meczow • '+Object.keys(leagueLab.endpoints).length+' endpointow';
     leagueLabSave();
