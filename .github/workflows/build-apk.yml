@@ -313,7 +313,7 @@ jobs:
           set -euo pipefail
           cd "$PROJECT_DIR"
           node --check app/src/main/assets/pomagier.user.js
-          node "$GITHUB_WORKSPACE/tools/test_league_lab_v1060.js" "$PROJECT_DIR/app/src/main/assets/pomagier.user.js"
+          node "$GITHUB_WORKSPACE/tools/test_league_lab_v1060.js" "app/src/main/assets/pomagier.user.js"
           python -m py_compile app/src/main/python/brain.py app/src/main/python/brain_android.py
           python - <<'PY'
           import pathlib
