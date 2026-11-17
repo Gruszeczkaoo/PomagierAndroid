@@ -300,6 +300,12 @@ jobs:
             python "$GITHUB_WORKSPACE/tools/patch_v1061.py" "$PROJECT_DIR"
           fi
 
+          if [ -f "$GITHUB_WORKSPACE/tools/patch_v1062.py" ]; then
+            echo "Nakładam aktualizację v1.0.62 — utrwalone przewijanie..."
+            python -m py_compile "$GITHUB_WORKSPACE/tools/patch_v1062.py"
+            python "$GITHUB_WORKSPACE/tools/patch_v1062.py" "$PROJECT_DIR"
+          fi
+
 
 
           VERSION="$(
@@ -321,6 +327,7 @@ jobs:
           node --check app/src/main/assets/pomagier.user.js
           node "$GITHUB_WORKSPACE/tools/test_league_lab_v1060.js" "app/src/main/assets/pomagier.user.js"
           node "$GITHUB_WORKSPACE/tools/test_opponent_lab_v1061.js"
+          node "$GITHUB_WORKSPACE/tools/test_scroll_v1062.js" "app/src/main/assets/pomagier.user.js"
           python -m py_compile app/src/main/python/brain.py app/src/main/python/brain_android.py
           python - <<'PY'
           import pathlib
