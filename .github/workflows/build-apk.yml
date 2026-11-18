@@ -343,6 +343,12 @@ jobs:
             python "$GITHUB_WORKSPACE/tools/patch_v1068.py" "$PROJECT_DIR"
           fi
 
+          if [ -f "$GITHUB_WORKSPACE/tools/patch_v1069.py" ]; then
+            echo "Nakładam aktualizację v1.0.69 — wybór najniższego LVL po braku pewniaka..."
+            python -m py_compile "$GITHUB_WORKSPACE/tools/patch_v1069.py"
+            python "$GITHUB_WORKSPACE/tools/patch_v1069.py" "$PROJECT_DIR"
+          fi
+
           VERSION="$(
             sed -n 's/^[[:space:]]*versionName[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
               "$PROJECT_DIR/app/build.gradle.kts" | head -n 1
@@ -365,6 +371,7 @@ jobs:
           node "$GITHUB_WORKSPACE/tools/test_opponent_style_v1064.js"
           node "$GITHUB_WORKSPACE/tools/test_prestige_auto_v1065.js"
           node "$GITHUB_WORKSPACE/tools/test_prestige_watch_v1068.js" "app/src/main/assets/pomagier.user.js"
+          node "$GITHUB_WORKSPACE/tools/test_prestige_fallback_v1069.js" "app/src/main/assets/pomagier.user.js"
           node "$GITHUB_WORKSPACE/tools/test_league_rivals_v1066.js" "app/src/main/assets/pomagier.user.js"
           node "$GITHUB_WORKSPACE/tools/test_league_history_v1067.js" "app/src/main/assets/pomagier.user.js"
           node "$GITHUB_WORKSPACE/tools/test_scroll_v1062.js" "app/src/main/assets/pomagier.user.js"
