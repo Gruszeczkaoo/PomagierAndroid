@@ -1,0 +1,15 @@
+'use strict';
+const assert=require('assert');
+const fs=require('fs');
+const source=fs.readFileSync(process.argv[2]||'app/src/main/assets/pomagier.user.js','utf8');
+assert(source.includes("const ANDROID_VERSION = '1.0.70';"),'app version');
+assert(source.includes('  prestigeAuto.cooldownMs=0;'),'no local attack cooldown');
+assert(!source.includes("prestigeAuto.status='ODSTEP 30 MIN — czekam'"),'no 30-min attack throttle status');
+assert(source.includes('Date.now()-prestigeAuto.lastCheckAt>=prestigeAuto.checkMinutes*60000'),'scheduler cadence');
+assert(source.includes('const pointState=prestigeAutoStatusCheck(status);'),'points check before auto attack');
+assert(source.includes("if(!pointState.ready)"),'stop if points or server not ready');
+assert(source.includes('if(prestigeAutoDayCount()>=prestigeAuto.maxDaily)'),'daily auto attack safety cap');
+assert(source.includes('if(Date.now()-prestigeAuto.lastAutoRollAt<30*60000 || prestigeAutoRollsDay()>=12)return;'),'independent risky POST reroll throttle preserved');
+assert(source.includes("prestigeAuto.status=result.won?'WYGRANA — wynik zapisany':'PRZEGRANA — automat zatrzymany';"),'auto stops after loss');
+assert(source.includes('function prestigeAutoChoose(candidates){'),'lower level fallback retained');
+console.log('OK prestige v1.0.70: no artificial attack cooldown, server safeguards and reroll throttle retained');
