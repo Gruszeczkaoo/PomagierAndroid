@@ -321,7 +321,7 @@
   function leagueLabIsIndividualFight(url,data={},meta={}){
     const u=pvpLabUrl(url),path=String(u?.pathname||'');
     if(!/\/api\//.test(path) || /(?:\bduels\b|\bpvp\/battle\b)/.test(path)) return false;
-    const body=pvpLabParseRequestBody(meta.requestBody)||{};
+    const body=typeof pvpLabParseRequestBody==='function'?(pvpLabParseRequestBody(meta.requestBody)||{}):{};
     const tokens=[path, data?.mode,data?.fightMode,data?.fightType,data?.leagueMode,data?.action,
       data?.result?.mode,body?.mode,body?.fightMode,body?.action,body?.type].map(x=>String(x??''));
     const explicit=tokens.some(x=>/(?:league|liga|dominat|pokaz.?dominacj)/i.test(x))||
